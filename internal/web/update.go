@@ -77,7 +77,25 @@ func (m model) onKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) onList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.help {
+		switch msg.String() {
+		case "?", "esc":
+			m.help = false
+		case "q":
+			m.help = false
+			if m.screen == scrMenu {
+				return m, tea.Quit
+			}
+			m.screen = scrMenu
+			m.cursor = 0
+			m.status = ""
+		}
+		return m, nil
+	}
 	switch msg.String() {
+	case "?":
+		m.help = true
+		return m, nil
 	case "q":
 		if m.screen == scrMenu {
 			return m, tea.Quit

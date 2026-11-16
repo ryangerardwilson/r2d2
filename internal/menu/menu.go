@@ -29,6 +29,7 @@ var blurbs = map[string]string{
 type model struct {
 	cursor int
 	status string
+	help   bool
 }
 
 type cameBack struct{ err error }
@@ -53,19 +54,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "q", "ctrl+c", "esc":
+		case "?":
+			m.help = !m.help
+			return m, nil
+		case "esc":
+			if m.help {
+				m.help = false
+				return m, nil
+			}
+			return m, tea.Quit
+		case "q", "ctrl+c":
 			return m, tea.Quit
 		case "j", "down":
+			if m.help {
+				return m, nil
+			}
 			if m.cursor < len(screen.Names)-1 {
 				m.cursor++
 			}
 			return m, nil
 		case "k", "up":
+			if m.help {
+				return m, nil
+			}
 			if m.cursor > 0 {
 				m.cursor--
 			}
 			return m, nil
 		case "enter":
+			if m.help {
+				return m, nil
+			}
 			cmd := exec.Command(executable(), screen.Names[m.cursor])
 			return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
 				return cameBack{err}
@@ -82,6 +101,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
+	if m.help {
+		return "r2d2\n\nj/k    move\nenter  open\n?      shortcuts\nq      quit\n"
+	}
 	var b strings.Builder
 	b.WriteString("r2d2\n\n")
 	for i, name := range screen.Names {
@@ -94,7 +116,7 @@ func (m model) View() string {
 	if m.status != "" {
 		fmt.Fprintf(&b, "\n%s", m.status)
 	}
-	b.WriteString("\nj/k move   enter open   q quit\n")
+	b.WriteString("\n")
 	return b.String()
 }
 

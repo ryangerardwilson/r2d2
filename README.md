@@ -2,7 +2,7 @@
 
 r2d2 is the terminal program. Running `r2d2` opens the screen menu. c3po is the agent CLI.
 
-On a terminal, `r2d2` with no arguments opens that menu. `j` and `k` move, Enter opens the screen, and `q` quits. A pipe prints the screen list. `r2d2 help` prints the same list.
+On a terminal, `r2d2` with no arguments opens that menu. `j` and `k` move, Enter opens the screen, and `q` quits. The menu and `r2d2 web` do not print shortcuts until `?` toggles them. A pipe prints the screen list. `r2d2 help` prints the same list.
 
 `r2d2 web` is the admin panel for [ryangerardwilson.com](https://ryangerardwilson.com). The other screens run in this process. There is no `c3po tui` command. A session restores with `r2d2 <screen> --resume <id>`.
 

@@ -39,6 +39,7 @@ type model struct {
 	cursor   int
 	status   string
 	busy     bool
+	help     bool
 	width    int
 	height   int
 	posts    []Post

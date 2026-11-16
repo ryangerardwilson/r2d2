@@ -2,7 +2,7 @@
 
 r2d2 is the terminal program. The module is `github.com/ryangerardwilson/r2d2`. The command is `r2d2`. c3po is the agent CLI. Agents use c3po and do not run r2d2.
 
-Running `r2d2` on a terminal opens the screen menu. `j` and `k` move, Enter opens the screen, and `q` quits. A pipe prints the screen list and exits 0. `r2d2 help` prints that list.
+Running `r2d2` on a terminal opens the screen menu. `j` and `k` move, Enter opens the screen, and `q` quits. The menu and `r2d2 web` do not print shortcuts until `?` toggles them. A pipe prints the screen list and exits 0. `r2d2 help` prints that list.
 
 `r2d2 web` is the ryangerardwilson.com admin screen. It reads the admin API key with `nebula crypt` (`crypt.Get` on vault Root, item `RGW_API_KEY`). It does not print that key. `R2D2_WEB_TOKEN` and `R2D2_WEB_ORIGIN` override the lookup and the origin.
 

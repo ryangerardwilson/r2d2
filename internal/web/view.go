@@ -6,6 +6,9 @@ import (
 )
 
 func (m model) View() string {
+	if m.help {
+		return m.helpView()
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "web  %s\n", m.origin)
 	if line := rule(m.sched); line != "" && (m.screen == scrEssays || m.screen == scrSchedule) {
@@ -39,7 +42,10 @@ func (m model) View() string {
 	if m.status != "" {
 		fmt.Fprintf(&b, "\n%s", m.status)
 	}
-	fmt.Fprintf(&b, "\n%s\n", m.hints())
+	if m.busy {
+		b.WriteString("\nworking")
+	}
+	b.WriteString("\n")
 	return b.String()
 }
 
@@ -128,7 +134,7 @@ func (m model) writeKeys(b *strings.Builder) {
 }
 
 func (m model) window(n int) (int, int) {
-	height := m.height - 8
+	height := m.height - 6
 	if height < 3 {
 		height = 3
 	}
@@ -154,24 +160,28 @@ func (m model) rowWidth() int {
 	return 78
 }
 
-func (m model) hints() string {
-	if m.busy {
-		return "working"
-	}
+func (m model) helpView() string {
+	lines := []string{"web", ""}
+	lines = append(lines, m.shortcutLines()...)
+	lines = append(lines, "?      shortcuts")
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func (m model) shortcutLines() []string {
 	switch m.screen {
 	case scrMenu:
-		return "j/k move   enter open   v view site   q quit"
+		return []string{"j/k    move", "enter  open", "v      view site", "q      quit"}
 	case scrEssays:
-		return "enter edits in vim   n new   u/d move the queue   x delete   s schedule   q back"
+		return []string{"enter  edit in vim", "n      new", "u/d    move the queue", "x      delete", "s      schedule", "q      back"}
 	case scrLanding:
-		return "enter edits   p portrait   c cover   q back"
+		return []string{"enter  edit", "p      portrait", "c      cover", "q      back"}
 	case scrPages:
-		return "enter edits in vim   n new   x delete   q back"
+		return []string{"enter  edit in vim", "n      new", "x      delete", "q      back"}
 	case scrKeys:
-		return "n new key   x revoke   q back"
+		return []string{"n      new key", "x      revoke", "q      back"}
 	case scrSchedule:
-		return "enter edits the field   q back"
+		return []string{"enter  edit the field", "q      back"}
 	default:
-		return "q back"
+		return []string{"q      back"}
 	}
 }
