@@ -8,7 +8,7 @@ Running `r2d2` on a terminal opens the screen menu. `j` and `k` move, Enter open
 
 Essays and long prose open in vim with `-c Wrap`. The saved text joins wrapped lines back into paragraphs. A blank line is a paragraph break. The first paragraph is the title.
 
-Screens other than `web` launch `c3po tui <screen>`. Do not import c3po. Do not add a `replace` directive to nebula. Require the published nebula module.
+Screens other than `web` run in this process through `github.com/ryangerardwilson/c3po/screen`. Require the published c3po and nebula modules. Do not add a `replace` directive.
 
 Do not add this module to the home `go.work`. Test with `GOWORK=off go test ./...`. Install with `bash install.sh` from this checkout. Work and commit inside this Git root.
 
