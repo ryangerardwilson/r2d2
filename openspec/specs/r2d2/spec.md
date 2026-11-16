@@ -2,17 +2,26 @@
 
 ## Purpose
 
-r2d2 opens terminal screens. c3po stays the agent CLI.
+r2d2 is the terminal program. Running it opens a screen menu. c3po stays the agent CLI.
 
 ## Requirements
 
 ### Requirement: r2d2 opens the screens
 
-The module SHALL build one command, `r2d2`. `r2d2` and `r2d2 help` SHALL list the screens and SHALL exit 0. The screens SHALL be `web`, `cyclotree`, `l`, `o`, `tunnel`, `gdrive`, `pass`, `deport`, `xl`, and `looptab`. `r2d2 version` SHALL print a line that starts with `r2d2 `. An unknown screen SHALL exit 2 and SHALL name that screen. `web` SHALL run inside r2d2. Every other screen SHALL launch `c3po tui <screen>` with the remaining arguments, including `--resume`.
+The module SHALL build one command, `r2d2`. On a terminal, `r2d2` with no arguments SHALL open a screen menu and SHALL NOT print the text help. `j` and `k` SHALL move the cursor without wrapping. Enter SHALL open the selected screen. `q` SHALL quit the menu. When stdout is not a terminal, `r2d2` with no arguments SHALL print the screen list and SHALL exit 0. `r2d2 help` SHALL print that same list and SHALL exit 0. The screens SHALL be `web`, `cyclotree`, `l`, `o`, `tunnel`, `gdrive`, `pass`, `deport`, `xl`, and `looptab`. `r2d2 version` SHALL print a line that starts with `r2d2 `. An unknown screen SHALL exit 2 and SHALL name that screen. `web` SHALL run inside r2d2. Every other screen SHALL launch `c3po tui <screen>` with the remaining arguments, including `--resume`.
+
+#### Scenario: A terminal opens the menu
+
+- **WHEN** the operator runs `r2d2` on a terminal
+- **THEN** a screen menu SHALL open
+- **AND** the menu SHALL list every screen
+- **AND** `j` and `k` SHALL move
+- **AND** Enter SHALL open the selected screen
+- **AND** `q` SHALL leave the menu
 
 #### Scenario: Help names the admin screen
 
-- **WHEN** the operator runs `r2d2`
+- **WHEN** the operator runs `r2d2 help`, or runs `r2d2` when stdout is not a terminal
 - **THEN** the command SHALL exit 0
 - **AND** the text SHALL name `r2d2 web`, `:Wrap`, `nebula crypt`, and a flowing paragraph
 

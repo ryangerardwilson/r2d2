@@ -4,16 +4,19 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/ryangerardwilson/r2d2/internal/menu"
 	"github.com/ryangerardwilson/r2d2/internal/screen"
 	"github.com/ryangerardwilson/r2d2/internal/version"
 	"github.com/ryangerardwilson/r2d2/internal/web"
 )
 
-// Help is the r2d2 help.
-const Help = `r2d2 opens terminal screens. c3po stays the agent CLI.
+// Help is the r2d2 help. A terminal opens the menu instead of printing it.
+const Help = `r2d2 is the terminal program. c3po is the agent CLI.
 
-Usage:
+  r2d2
+    open the screen menu
   r2d2 web
+    ryangerardwilson.com admin panel
   r2d2 cyclotree [symbol] [dir]
   r2d2 l [path] [flags]
   r2d2 o [args...]
@@ -38,6 +41,8 @@ screens:
   xl           spreadsheet for a budget workbook
   looptab      Looptab jobs, run one now
 
+A pipe prints this text. A terminal opens the menu. j and k move, Enter
+opens the screen, and q quits.
 r2d2 web reads the admin API key with nebula crypt. Essays open in vim
 with :Wrap, and the saved text is a flowing paragraph.
 r2d2 <screen> help explains one screen.
@@ -49,7 +54,14 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 {
 		rest = args[1:]
 	}
-	if len(rest) == 0 || helpWord(rest[0]) {
+	if len(rest) == 0 {
+		if code, opened := menu.Run(stdout, stderr); opened {
+			return code
+		}
+		fmt.Fprint(stdout, Help)
+		return 0
+	}
+	if helpWord(rest[0]) {
 		fmt.Fprint(stdout, Help)
 		return 0
 	}
