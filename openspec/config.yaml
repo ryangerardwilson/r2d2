@@ -4,8 +4,7 @@ context: |
   r2d2 is a Go program that opens terminal screens. The command is r2d2.
   r2d2 web is the ryangerardwilson.com admin panel. It reads the admin API
   key through nebula crypt and does not print it. Essays open in vim with
-  :Wrap. The saved text is a flowing paragraph. Other screens launch
-  c3po tui. c3po stays the agent CLI.
+  :Wrap. The saved text is a flowing paragraph. Other screens run inside r2d2. There is no c3po tui command. c3po stays the agent CLI.
 
 rules:
   proposal:
