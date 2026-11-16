@@ -54,7 +54,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if versionWord(rest[0]) && len(rest) == 1 {
-		fmt.Fprintf(stdout, "r2d2 %s\n", version.Version)
+		fmt.Fprintf(stdout, "r2d2 %s\n", version.String())
 		return 0
 	}
 	name := rest[0]

@@ -7,3 +7,11 @@ var (
 	SourceHash = ""
 	BuildTime  = ""
 )
+
+// String is the version stamped into the r2d2 binary.
+func String() string {
+	if Commit == "" || Commit == "unknown" {
+		return Version
+	}
+	return Version + "+" + Commit
+}

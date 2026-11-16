@@ -42,7 +42,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(args) == 1 && (args[0] == "version" || args[0] == "--version" || args[0] == "-v") {
-		fmt.Fprintf(stdout, "r2d2 %s\n", version.Version)
+		fmt.Fprintf(stdout, "r2d2 %s\n", version.String())
 		return 0
 	}
 	if len(args) > 0 {
