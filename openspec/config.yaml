@@ -1,0 +1,17 @@
+schema: spec-driven
+
+context: |
+  r2d2 is a Go program that opens terminal screens. The command is r2d2.
+  r2d2 web is the ryangerardwilson.com admin panel. It reads the admin API
+  key through nebula crypt and does not print it. Essays open in vim with
+  :Wrap. The saved text is a flowing paragraph. Other screens launch
+  c3po tui. c3po stays the agent CLI.
+
+rules:
+  proposal:
+    - State the operator problem, outcome, scope, and non-goals.
+  specs:
+    - Use SHALL or MUST and concrete GIVEN/WHEN/THEN scenarios.
+  tasks:
+    - Include strict OpenSpec validation and the relevant Go tests.
+    - Mark a task complete only after the check has been run.
