@@ -16,7 +16,7 @@ import (
 var blurbs = map[string]string{
 	"web":       "ryangerardwilson.com admin panel",
 	"cyclotree": "calls of one function, as a tree you move with hjkl",
-	"l":         "compact colored tree of a directory",
+	"l":         "compact gray tree of a directory",
 	"o":         "vim-inspired file navigator",
 	"tunnel":    "Cloudflare Tunnel route editor",
 	"gdrive":    "Drive preset, then browse",
