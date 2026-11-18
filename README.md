@@ -6,7 +6,7 @@ On a terminal, `r2d2` with no arguments opens that menu. `j` and `k` move, Enter
 
 `r2d2 web` is the admin panel for [ryangerardwilson.com](https://ryangerardwilson.com). The other screens run in this process. There is no `c3po tui` command. A session restores with `r2d2 <screen> --resume <id>`.
 
-`r2d2 slack` shows the Slack desk. `h` and `l` switch workspace. The table is direct messages, tags, and what to know. Enter opens the row. `r` marks it read on the desk. Opening a row does not mark it read. The user token is not shown.
+`r2d2 slack` shows the Slack desk. `h` and `l` switch workspace. The table is direct messages, tags, and what to know. Enter opens the row. `r` marks it read on the desk. Opening a row does not mark it read. `s` syncs the desk from Slack. The screen shows when the desk last synced. The user token is not shown.
 
 ```sh
 r2d2 web

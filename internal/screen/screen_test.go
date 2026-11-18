@@ -20,7 +20,7 @@ func TestLaunchPassesTheScreenArguments(t *testing.T) {
 	errb.Reset()
 	code = Launch("slack", []string{"help"}, &out, &errb)
 	text = out.String() + errb.String()
-	if code != 0 || !bytes.Contains([]byte(text), []byte("r2d2 slack")) || !bytes.Contains([]byte(text), []byte("Opening an item does not mark it read")) {
+	if code != 0 || !bytes.Contains([]byte(text), []byte("r2d2 slack")) || !bytes.Contains([]byte(text), []byte("Opening an item does not mark it read")) || !bytes.Contains([]byte(text), []byte("syncs the desk from Slack")) {
 		t.Fatalf("slack %d\n%s", code, text)
 	}
 }
