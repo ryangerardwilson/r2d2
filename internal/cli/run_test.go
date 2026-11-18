@@ -11,7 +11,7 @@ func TestHelpNamesWebAndWrap(t *testing.T) {
 	if code := Run([]string{"r2d2"}, &out, &err); code != 0 {
 		t.Fatalf("code %d", code)
 	}
-	for _, want := range []string{"r2d2 web", "cyclotree", ":Wrap", "nebula crypt", "flowing paragraph"} {
+	for _, want := range []string{"r2d2 web", "r2d2 slack", "cyclotree", ":Wrap", "nebula crypt", "flowing paragraph"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("missing %q\n%s", want, out.String())
 		}

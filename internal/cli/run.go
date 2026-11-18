@@ -26,6 +26,7 @@ const Help = `r2d2 is the terminal program. c3po is the agent CLI.
   r2d2 deport
   r2d2 xl [file]
   r2d2 looptab
+  r2d2 slack
   r2d2 version
   r2d2 help
 
@@ -40,6 +41,7 @@ screens:
   deport       occupied external ports, freed with dd
   xl           spreadsheet for a budget workbook
   looptab      Looptab jobs, run one now
+  slack        Slack workspaces, then a conversation
 
 A pipe prints this text. A terminal opens the menu. j and k move, Enter
 opens the screen, and q quits.

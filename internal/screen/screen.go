@@ -9,7 +9,7 @@ import (
 
 // Names are the screens r2d2 opens. web is implemented here. The others
 // run in this process through the c3po screen package.
-var Names = []string{"web", "cyclotree", "l", "o", "tunnel", "gdrive", "pass", "deport", "xl", "looptab"}
+var Names = []string{"web", "cyclotree", "l", "o", "tunnel", "gdrive", "pass", "deport", "xl", "looptab", "slack"}
 
 // Known reports whether name is a screen.
 func Known(name string) bool {

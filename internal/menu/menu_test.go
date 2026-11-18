@@ -9,7 +9,7 @@ import (
 
 func TestMenuMarksTheFirstScreen(t *testing.T) {
 	text := model{}.View()
-	if !strings.Contains(text, "> web") || !strings.Contains(text, "cyclotree") || !strings.Contains(text, "looptab") {
+	if !strings.Contains(text, "> web") || !strings.Contains(text, "cyclotree") || !strings.Contains(text, "looptab") || !strings.Contains(text, "slack") {
 		t.Fatalf("%s", text)
 	}
 	if strings.Contains(text, "> cyclotree") {
