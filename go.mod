@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/charmbracelet/bubbletea v1.3.10
-	github.com/ryangerardwilson/c3po v0.4.1-0.20261118005015-ca5687e51fb4
+	github.com/ryangerardwilson/c3po v0.4.1-0.20261118033521-f6156ed6eaaf
 	github.com/ryangerardwilson/nebula v0.0.0-20261115084909-a30a3b9fd0bd
 	golang.org/x/term v0.44.0
 )

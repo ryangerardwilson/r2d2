@@ -41,7 +41,7 @@ screens:
   deport       occupied external ports, freed with dd
   xl           spreadsheet for a budget workbook
   looptab      Looptab jobs, run one now
-  slack        Slack workspaces, then a conversation
+  slack        direct messages, tags, and what to know
 
 A pipe prints this text. A terminal opens the menu. j and k move, Enter
 opens the screen, and q quits.

@@ -24,7 +24,7 @@ var blurbs = map[string]string{
 	"deport":    "occupied external ports, freed with dd",
 	"xl":        "spreadsheet for a budget workbook",
 	"looptab":   "Looptab jobs, run one now",
-	"slack":     "Slack workspaces, then a conversation",
+	"slack":     "direct messages, tags, and what to know",
 }
 
 type model struct {
