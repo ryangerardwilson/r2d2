@@ -17,7 +17,7 @@ func TestMenuMarksTheFirstScreen(t *testing.T) {
 	}
 }
 
-func TestMenuMovesDownAndStops(t *testing.T) {
+func TestMenuMovesAndWraps(t *testing.T) {
 	var m tea.Model = model{}
 	m, _ = m.Update(key("j"))
 	text := m.View()
@@ -29,8 +29,12 @@ func TestMenuMovesDownAndStops(t *testing.T) {
 		t.Fatalf("%s", m.View())
 	}
 	m, _ = m.Update(key("k"))
-	if !strings.Contains(m.View(), "> web") {
-		t.Fatalf("moved above the first row\n%s", m.View())
+	if !strings.Contains(m.View(), "> rec") {
+		t.Fatalf("wrap\n%s", m.View())
+	}
+	m, _ = m.Update(key("j"))
+	if !strings.Contains(m.View(), "> web") || strings.Contains(m.View(), "> rec") {
+		t.Fatalf("back\n%s", m.View())
 	}
 }
 

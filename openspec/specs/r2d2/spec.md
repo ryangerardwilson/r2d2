@@ -8,7 +8,9 @@ r2d2 is the terminal program. Running it opens a screen menu. c3po stays the age
 
 ### Requirement: r2d2 opens the screens
 
-The module SHALL build one command, `r2d2`. On a terminal, `r2d2` with no arguments SHALL open a screen menu and SHALL NOT print the text help. `j` and `k` SHALL move the cursor without wrapping. Enter SHALL open the selected screen. `q` SHALL quit the menu. The menu and `r2d2 web` SHALL NOT write shortcut text until the operator presses `?`. `?` SHALL toggle that list, and a second `?` SHALL hide it. While the list is open, `j` and `k` SHALL NOT move. When stdout is not a terminal, `r2d2` with no arguments SHALL print the screen list and SHALL exit 0. `r2d2 help` SHALL print that same list and SHALL exit 0. The screens SHALL be `web`, `cyclotree`, `l`, `o`, `tunnel`, `gdrive`, `pass`, `deport`, `xl`, `looptab`, `slack`, `health`, `musica`, and `rec`. `r2d2 version` SHALL print a line that starts with `r2d2 `. An unknown screen SHALL exit 2 and SHALL name that screen. `web`, `health`, `musica`, and `rec` SHALL run inside r2d2. Every other screen SHALL run inside r2d2 through the c3po screen package, with the remaining arguments, including `--resume`. r2d2 SHALL NOT exec `c3po tui`.
+The module SHALL build one command, `r2d2`. On a terminal, `r2d2` with no arguments SHALL open a screen menu and SHALL NOT print the text help. `j` and `k` SHALL move the cursor and SHALL wrap. On the last screen, `j` SHALL move to the first screen. On the first screen, `k` SHALL move to the last screen. Enter SHALL open the selected screen. `q` SHALL quit the menu. The menu and `r2d2 web` SHALL NOT write shortcut text until the operator presses `?`. `?` SHALL toggle that list, and a second `?` SHALL hide it. While the list is open, `j` and `k` SHALL NOT move. When stdout is not a terminal, `r2d2` with no arguments SHALL print the screen list and SHALL exit 0. `r2d2 help` SHALL print that same list and SHALL exit 0. The screens SHALL be `web`, `cyclotree`, `l`, `o`, `tunnel`, `gdrive`, `pass`, `deport`, `xl`, `looptab`, `slack`, `health`, `musica`, and `rec`. `r2d2 version` SHALL print a line that starts with `r2d2 `. An unknown screen SHALL exit 2 and SHALL name that screen. `web`, `health`, `musica`, and `rec` SHALL run inside r2d2. Every other screen SHALL run inside r2d2 through the c3po screen package, with the remaining arguments, including `--resume`. r2d2 SHALL NOT exec `c3po tui`.
+
+On `r2d2 web`, `j` and `k` SHALL wrap each list: the section menu, the essays, the landing fields, the pages, the API keys, and the schedule fields. On the last row, `j` SHALL move to the first row. On the first row, `k` SHALL move to the last row. An empty list SHALL leave the cursor in place. While the shortcut list is open, `j` and `k` SHALL NOT move.
 
 #### Scenario: A terminal opens the menu
 
@@ -52,6 +54,20 @@ The module SHALL build one command, `r2d2`. On a terminal, `r2d2` with no argume
 - **AND** the text SHALL name `r2d2 o`
 - **AND** `r2d2 o --resume <id>` SHALL pass `--resume` and that id to the screen
 
+#### Scenario: The menu wraps
+
+- **WHEN** the menu cursor is on `web`
+- **AND** the operator presses `k`
+- **THEN** the cursor SHALL be on `rec`
+- **AND** `j` SHALL move it back to `web`
+
+#### Scenario: An admin list wraps
+
+- **GIVEN** the essay list has two essays and the cursor is on the last
+- **WHEN** the operator presses `j`
+- **THEN** the cursor SHALL be on the first essay
+- **AND** `k` SHALL move it back to the last essay
+
 ### Requirement: The admin screen uses the site API
 
 `r2d2 web` SHALL call the ryangerardwilson.com admin API. The default origin SHALL be `https://ryangerardwilson.com`. `R2D2_WEB_ORIGIN` SHALL override it. The admin API key SHALL be read with nebula `crypt` from vault Root, item `RGW_API_KEY`, unless `R2D2_WEB_TOKEN` is set. The key SHALL NOT be printed, including in an error. A non-terminal SHALL print the web help and SHALL exit 0. `r2d2 web help` SHALL exit 0 and SHALL name `:Wrap` and `RGW_API_KEY`. Extra arguments SHALL exit 2.
@@ -80,3 +96,4 @@ An essay, a page, and a long landing field SHALL open in `vim -c Wrap`. The save
 - **WHEN** the buffer is read back
 - **THEN** the title SHALL be `A quiet ending`
 - **AND** the body SHALL keep a blank line between its paragraphs
+

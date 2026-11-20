@@ -73,17 +73,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.help {
 				return m, nil
 			}
-			if m.cursor < len(screen.Names)-1 {
-				m.cursor++
-			}
+			m.cursor = cycled(m.cursor, 1, len(screen.Names))
 			return m, nil
 		case "k", "up":
 			if m.help {
 				return m, nil
 			}
-			if m.cursor > 0 {
-				m.cursor--
-			}
+			m.cursor = cycled(m.cursor, -1, len(screen.Names))
 			return m, nil
 		case "enter":
 			if m.help {
@@ -102,6 +98,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		return m, nil
 	}
+}
+
+func cycled(cursor, delta, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	if cursor < 0 {
+		cursor = 0
+	} else if cursor >= n {
+		cursor = n - 1
+	}
+	return (cursor + delta%n + n) % n
 }
 
 func (m model) View() string {

@@ -253,8 +253,19 @@ func (m *model) move(delta, n int) {
 	if n == 0 {
 		return
 	}
-	m.cursor += delta
-	m.clamp(n)
+	m.cursor = cycled(m.cursor, delta, n)
+}
+
+func cycled(cursor, delta, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	if cursor < 0 {
+		cursor = 0
+	} else if cursor >= n {
+		cursor = n - 1
+	}
+	return (cursor + delta%n + n) % n
 }
 
 func stays(slug string) bool {
