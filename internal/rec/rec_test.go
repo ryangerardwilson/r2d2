@@ -3,6 +3,7 @@ package rec
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -13,6 +14,18 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+func emptyRecordings() []recording { return nil }
+
+func init() {
+	scanRecordings = emptyRecordings
+}
+
+func useRecordings(t *testing.T, rows []recording) {
+	t.Helper()
+	scanRecordings = func() []recording { return rows }
+	t.Cleanup(func() { scanRecordings = emptyRecordings })
+}
 
 // fake is a widget that answers from a script. Nothing here starts GTK, a camera, or the recorder.
 type fake struct {
@@ -180,7 +193,7 @@ func TestSizeIsRemembered(t *testing.T) {
 
 func TestHelpAndUnknownWords(t *testing.T) {
 	code, out, _ := runFake(t, &fake{}, false, "help")
-	if code != 0 || !strings.Contains(out, "r2d2 rec") || !strings.Contains(out, "j and k") || !strings.Contains(out, "never draws it") {
+	if code != 0 || !strings.Contains(out, "r2d2 rec") || !strings.Contains(out, "j and k") || !strings.Contains(out, "never draws it") || !strings.Contains(out, "plays it") {
 		t.Fatalf("code %d\n%s", code, out)
 	}
 	if code, _, errText := runFake(t, &fake{}, false, "record"); code != 2 || !strings.Contains(errText, "record") {
@@ -240,8 +253,8 @@ func TestTheScreenListsTheActions(t *testing.T) {
 			t.Fatalf("missing %q\n%s", line, text)
 		}
 	}
-	if strings.Contains(text, "1      start") || strings.Contains(text, "ctrl+c") {
-		t.Fatalf("shortcut page:\n%s", text)
+	if strings.Contains(text, "1      start") || strings.Contains(text, "ctrl+c") || strings.Contains(text, "recordings") {
+		t.Fatalf("shortcut page or empty recordings:\n%s", text)
 	}
 	m = press(t, m, "j")
 	if !strings.Contains(m.View(), "> "+bold+"pause"+reset) || m.cursor != 1 {
@@ -427,5 +440,187 @@ func TestSendTalksToTheSocket(t *testing.T) {
 	reply, err := (live{}).Send("status", time.Second)
 	if err != nil || reply != "recording 0:09 focus" {
 		t.Fatalf("%q %v", reply, err)
+	}
+}
+
+func writeRecording(t *testing.T, dir, name string, mod time.Time) {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, mod, mod); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestScanListsTheNewestRecordings(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("OMARCHY_SCREENRECORD_DIR", dir)
+	base := time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC)
+	writeRecording(t, dir, "screenrecording-2026-11-19_01-02-03.mp4", base)
+	writeRecording(t, dir, "screenrecording-2026-11-20_08-18-49.mp4", base.Add(time.Hour))
+	writeRecording(t, dir, "screenrecording-2026-11-20_08-18-49-processed.mp4", base.Add(2*time.Hour))
+	writeRecording(t, dir, "notes.mp4", base.Add(3*time.Hour))
+	writeRecording(t, dir, "screenrecording-weird.mp4", base.Add(30*time.Minute))
+	if err := os.Mkdir(filepath.Join(dir, "screenrecording-dir.mp4"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := scanVideos()
+	if len(got) != 3 {
+		t.Fatalf("%+v", got)
+	}
+	if got[0].label != "2026-11-20 08:18:49" || got[1].label != "weird" || got[2].label != "2026-11-19 01:02:03" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestScanKeepsTwentyNewest(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("OMARCHY_SCREENRECORD_DIR", dir)
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := range 21 {
+		name := fmt.Sprintf("screenrecording-2026-01-%02d_00-00-00.mp4", i+1)
+		writeRecording(t, dir, name, base.Add(time.Duration(i)*time.Hour))
+	}
+	got := scanVideos()
+	if len(got) != 20 || got[0].label != "2026-01-21 00:00:00" || got[19].label != "2026-01-02 00:00:00" {
+		t.Fatalf("len %d first %s last %s", len(got), got[0].label, got[len(got)-1].label)
+	}
+}
+
+func TestVideosDirPrefersTheScreenrecordDir(t *testing.T) {
+	t.Setenv("OMARCHY_SCREENRECORD_DIR", "/tmp/recs")
+	t.Setenv("XDG_VIDEOS_DIR", "/tmp/xdg")
+	if videosDir() != "/tmp/recs" {
+		t.Fatalf("%s", videosDir())
+	}
+}
+
+func TestVideosDirReadsUserDirs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("OMARCHY_SCREENRECORD_DIR", "")
+	t.Setenv("XDG_VIDEOS_DIR", "")
+	if err := os.MkdirAll(filepath.Join(home, ".config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "XDG_VIDEOS_DIR=\"$HOME/Movies\"\n"
+	if err := os.WriteFile(filepath.Join(home, ".config", "user-dirs.dirs"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := videosDir(); got != filepath.Join(home, "Movies") {
+		t.Fatalf("%s", got)
+	}
+}
+
+func TestEnterPlaysTheNewerRecording(t *testing.T) {
+	var played []string
+	startPlayback = func(path string) error {
+		played = append(played, path)
+		return nil
+	}
+	t.Cleanup(func() { startPlayback = playWithMpv })
+	useRecordings(t, []recording{
+		{path: "/v/new.mp4", label: "newer"},
+		{path: "/v/old.mp4", label: "older"},
+	})
+	var asked []string
+	m := newModel(func(command string) Result {
+		asked = append(asked, command)
+		return Result{Out: "idle"}
+	})
+	m.working = ""
+	if !strings.Contains(m.View(), dim+"recordings"+reset) || !strings.Contains(m.View(), "  newer") {
+		t.Fatalf("list:\n%s", m.View())
+	}
+	m = press(t, m, "k")
+	if m.cursor != 7 || !strings.Contains(m.View(), "> "+bold+"older"+reset) {
+		t.Fatalf("k wrap:\n%s", m.View())
+	}
+	m = press(t, m, "j")
+	if m.cursor != 0 {
+		t.Fatalf("j wrap: %d", m.cursor)
+	}
+	for range 6 {
+		m = press(t, m, "j")
+	}
+	m = press(t, m, "1")
+	m = press(t, m, "enter")
+	if len(played) != 1 || played[0] != "/v/new.mp4" || len(asked) != 0 || m.kind != "playing" || m.note != "newer" {
+		t.Fatalf("played %v asked %v kind %s note %s", played, asked, m.kind, m.note)
+	}
+	next, cmd := m.Update(key("q"))
+	if len(played) != 1 || len(asked) != 0 || next.(model).quitting || cmd == nil {
+		t.Fatalf("q played %v asked %v", played, asked)
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("q did not leave")
+	}
+}
+
+func TestAMissingPlayerShowsTheError(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	useRecordings(t, []recording{{path: "/v/new.mp4", label: "newer"}})
+	var asked []string
+	m := newModel(func(command string) Result {
+		asked = append(asked, command)
+		return Result{Out: "idle"}
+	})
+	for range 6 {
+		m = press(t, m, "j")
+	}
+	m = press(t, m, "enter")
+	if m.kind != "error" || !strings.Contains(m.note, "mpv") || len(asked) != 0 {
+		t.Fatalf("kind %s note %s asked %v", m.kind, m.note, asked)
+	}
+	if !strings.Contains(m.View(), bold+m.note+reset) {
+		t.Fatalf("%s", m.View())
+	}
+}
+
+func TestTheListRefreshesAfterAPollAndASave(t *testing.T) {
+	show := false
+	scanRecordings = func() []recording {
+		if !show {
+			return nil
+		}
+		return []recording{{path: "/v/new.mp4", label: "2026-11-20 08:18:49"}}
+	}
+	t.Cleanup(func() { scanRecordings = emptyRecordings })
+	m := newModel(func(string) Result { return Result{Out: "idle"} })
+	m.working = ""
+	if strings.Contains(m.View(), "recordings") {
+		t.Fatal("showed recordings too early")
+	}
+	show = true
+	next, cmd := m.Update(key("r"))
+	m = next.(model)
+	msg, ok := cmd().(polled)
+	if !ok {
+		t.Fatalf("r: %T", cmd())
+	}
+	next, _ = m.Update(msg)
+	m = next.(model)
+	if !strings.Contains(m.View(), "2026-11-20 08:18:49") {
+		t.Fatalf("after r:\n%s", m.View())
+	}
+	show = false
+	m.reloadRecordings()
+	if strings.Contains(m.View(), "recordings") {
+		t.Fatal("reload kept a gone recording")
+	}
+	show = true
+	m.seq = 1
+	next, _ = m.Update(done{seq: 1, command: "stop", res: Result{Out: "/v/new.mp4"}})
+	m = next.(model)
+	if !strings.Contains(m.View(), "recordings") || m.cursor != 0 {
+		t.Fatalf("after save cursor %d\n%s", m.cursor, m.View())
+	}
+	m.cursor = 6
+	show = false
+	m.reloadRecordings()
+	if m.cursor != 5 {
+		t.Fatalf("clamp %d", m.cursor)
 	}
 }

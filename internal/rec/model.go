@@ -8,18 +8,19 @@ import (
 )
 
 type model struct {
-	do       func(string) Result
-	word     string
-	clock    string
-	focus    bool
-	note     string
-	kind     string
-	working  string
-	seq      int
-	polling  bool
-	cursor   int
-	quitting bool
-	final    Result
+	do         func(string) Result
+	word       string
+	clock      string
+	focus      bool
+	note       string
+	kind       string
+	working    string
+	seq        int
+	polling    bool
+	cursor     int
+	recordings []recording
+	quitting   bool
+	final      Result
 }
 
 type tick struct{}
@@ -33,7 +34,9 @@ type done struct {
 }
 
 func newModel(do func(string) Result) model {
-	return model{do: do, word: "closed", working: "open"}
+	m := model{do: do, word: "closed", working: "open"}
+	m.reloadRecordings()
+	return m
 }
 
 // Init opens the camera if it is closed and starts the once-a-second status.
@@ -82,6 +85,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 type item struct {
 	command string
+	path    string
 	label   string
 }
 
@@ -91,13 +95,27 @@ func (m model) items() []item {
 	if m.focus {
 		you = "put the camera back in the corner"
 	}
-	return []item{
-		{"start", "start"},
-		{"pause", "pause"},
-		{"resume", "resume"},
-		{"stop", "stop and save, camera stays open"},
-		{"focus", you},
-		{"quit", "save and close"},
+	rows := []item{
+		{"start", "", "start"},
+		{"pause", "", "pause"},
+		{"resume", "", "resume"},
+		{"stop", "", "stop and save, camera stays open"},
+		{"focus", "", you},
+		{"quit", "", "save and close"},
+	}
+	for _, rec := range m.recordings {
+		rows = append(rows, item{path: rec.path, label: rec.label})
+	}
+	return rows
+}
+
+func (m *model) reloadRecordings() {
+	m.recordings = scanRecordings()
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+	if n := len(m.items()); n > 0 && m.cursor >= n {
+		m.cursor = n - 1
 	}
 }
 
@@ -128,8 +146,21 @@ func (m model) key(key string) (tea.Model, tea.Cmd) {
 	case "r":
 		return m.poll()
 	case "enter":
-		return m.run(rows[m.cursor].command)
+		row := rows[m.cursor]
+		if row.path != "" {
+			return m.play(row)
+		}
+		return m.run(row.command)
 	}
+	return m, nil
+}
+
+func (m model) play(row item) (model, tea.Cmd) {
+	if err := startPlayback(row.path); err != nil {
+		m.note, m.kind = firstText(err.Error()), "error"
+		return m, nil
+	}
+	m.note, m.kind = row.label, "playing"
 	return m, nil
 }
 
@@ -167,6 +198,7 @@ func (m model) finish(msg done) (tea.Model, tea.Cmd) {
 		}
 	case strings.HasSuffix(res.Out, ".mp4"):
 		m.note, m.kind = res.Out, "saved"
+		m.reloadRecordings()
 	case !m.status(res.Out) && res.Out != "":
 		m.note, m.kind = res.Out, "reply"
 	}
@@ -182,6 +214,7 @@ func (m *model) status(line string) bool {
 	if !ok {
 		return false
 	}
+	defer m.reloadRecordings()
 	m.word, m.clock = s.word, s.clock
 	if s.err != "" {
 		m.note, m.kind = s.err, "error"

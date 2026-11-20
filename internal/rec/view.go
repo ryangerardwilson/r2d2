@@ -34,7 +34,11 @@ func (m model) View() string {
 		fmt.Fprintf(&b, "\n%s%s%s\n", dim, working[m.working], reset)
 	}
 	b.WriteString("\n")
-	for i, row := range m.items() {
+	rows := m.items()
+	for i, row := range rows {
+		if row.path != "" && (i == 0 || rows[i-1].path == "") {
+			fmt.Fprintf(&b, "\n%srecordings%s\n", dim, reset)
+		}
 		mark := "  "
 		label := row.label
 		if i == m.cursor {
