@@ -43,6 +43,13 @@ func TestMenuListsHealthAndMusica(t *testing.T) {
 	}
 }
 
+func TestMenuListsRec(t *testing.T) {
+	text := model{}.View()
+	if !strings.Contains(text, "rec          screen recorder and camera") {
+		t.Fatalf("%s", text)
+	}
+}
+
 func TestMenuHidesShortcutsUntilQuestionMark(t *testing.T) {
 	text := model{}.View()
 	if strings.Contains(text, "j/k") || strings.Contains(text, "quit") {

@@ -27,6 +27,7 @@ var blurbs = map[string]string{
 	"slack":     "direct messages, tags, and what to know",
 	"health":    "background jobs and nebula backups",
 	"musica":    "player, cassettes, and downloads",
+	"rec":       "screen recorder and camera",
 }
 
 type model struct {

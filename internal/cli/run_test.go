@@ -67,3 +67,22 @@ func TestMusicaHelpIsThePlayerHelp(t *testing.T) {
 		t.Fatalf("code %d\n%s%s", code, out.String(), err.String())
 	}
 }
+
+func TestHelpNamesRec(t *testing.T) {
+	var out, err bytes.Buffer
+	if code := Run([]string{"r2d2", "help"}, &out, &err); code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	for _, want := range []string{"r2d2 rec", "rec          screen recorder and camera"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("missing %q\n%s", want, out.String())
+		}
+	}
+}
+
+func TestRecHelpWithoutATerminal(t *testing.T) {
+	var out, err bytes.Buffer
+	if code := Run([]string{"r2d2", "rec", "help"}, &out, &err); code != 0 || !strings.Contains(out.String(), "r2d2 rec") || !strings.Contains(out.String(), "rec is not open") {
+		t.Fatalf("code %d\n%s", code, out.String())
+	}
+}

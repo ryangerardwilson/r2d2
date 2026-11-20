@@ -8,6 +8,7 @@ import (
 	"github.com/ryangerardwilson/musica/player"
 	"github.com/ryangerardwilson/r2d2/internal/health"
 	"github.com/ryangerardwilson/r2d2/internal/menu"
+	"github.com/ryangerardwilson/r2d2/internal/rec"
 	"github.com/ryangerardwilson/r2d2/internal/screen"
 	"github.com/ryangerardwilson/r2d2/internal/version"
 	"github.com/ryangerardwilson/r2d2/internal/web"
@@ -34,6 +35,8 @@ const Help = `r2d2 is the terminal program. c3po is the agent CLI.
     whether background jobs and nebula backups are working
   r2d2 musica [args...]
     the musica player; end, play, open, config, and help pass through
+  r2d2 rec [start|pause|resume|stop|focus|quit|status|toggle]
+    the camera in the corner of a screen recording, and its controls
   r2d2 version
   r2d2 help
 
@@ -51,6 +54,7 @@ screens:
   slack        direct messages, tags, and what to know
   health       background jobs and nebula backups
   musica       player, cassettes, and downloads
+  rec          screen recorder and camera
 
 A pipe prints this text. A terminal opens the menu. j and k move, Enter
 opens the screen, and q quits.
@@ -88,6 +92,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return health.Run(rest[1:], stdout, stderr)
 	case "musica":
 		return player.Run(rest[1:], os.Stdin, stdout, stderr)
+	case "rec":
+		return rec.Run(rest[1:], stdout, stderr)
 	}
 	if !screen.Known(name) {
 		fmt.Fprintf(stderr, "unknown screen %q\n", name)

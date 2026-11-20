@@ -12,6 +12,8 @@ On a terminal, `r2d2` with no arguments opens that menu. `j` and `k` move, Enter
 
 `r2d2 musica` opens the [musica](https://github.com/ryangerardwilson/musica) player through its public `player` package. `r2d2 musica end`, `help`, `play`, `open`, and `config` pass through. Downloads still run as `musica download-worker`, so the musica binary stays installed.
 
+`r2d2 rec` controls the rec camera, the circle in the corner of a screen recording. The camera stays its own window so it is in the recording. On a terminal the screen shows the status, the clock, whether the camera is in the corner or fills the screen, and the last error or saved file. `r2d2 rec start`, `pause`, `resume`, `stop`, `focus`, `quit`, `status`, and `toggle` print the camera's reply. Without a terminal, `r2d2 rec` opens the camera and exits 0.
+
 ```sh
 r2d2 web
 r2d2 cyclotree [symbol] [dir]
@@ -26,6 +28,7 @@ r2d2 looptab
 r2d2 slack
 r2d2 health
 r2d2 musica [args...]
+r2d2 rec [start|pause|resume|stop|focus|quit|status|toggle]
 r2d2 version
 r2d2 help
 ```
