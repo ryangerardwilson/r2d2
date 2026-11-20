@@ -63,6 +63,7 @@ install_from_source() {
   ldflags="-s -w -X ${pkg}.Version=${version} -X ${pkg}.Commit=${commit} -X ${pkg}.SourceHash=${source_hash} -X ${pkg}.BuildTime=${build_time}"
   (cd "$source_path" && GOWORK=off CGO_ENABLED=0 go build -ldflags "$ldflags" -o "$INSTALL_DIR/$APP" ./cmd/r2d2)
   chmod 755 "$INSTALL_DIR/$APP"
+  sh "$source_path/camera/install.sh"
   "$INSTALL_DIR/$APP" version
 }
 
