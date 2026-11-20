@@ -180,7 +180,7 @@ func TestSizeIsRemembered(t *testing.T) {
 
 func TestHelpAndUnknownWords(t *testing.T) {
 	code, out, _ := runFake(t, &fake{}, false, "help")
-	if code != 0 || !strings.Contains(out, "r2d2 rec") || !strings.Contains(out, "control system") || !strings.Contains(out, "never draws it") {
+	if code != 0 || !strings.Contains(out, "r2d2 rec") || !strings.Contains(out, "j and k") || !strings.Contains(out, "never draws it") {
 		t.Fatalf("code %d\n%s", code, out)
 	}
 	if code, _, errText := runFake(t, &fake{}, false, "record"); code != 2 || !strings.Contains(errText, "record") {
@@ -231,32 +231,34 @@ func press(t *testing.T, m model, s string) model {
 	return m
 }
 
-func TestShortcutsStayHiddenUntilQuestionMark(t *testing.T) {
-	var asked []string
-	m := newModel(func(command string) Result {
-		asked = append(asked, command)
-		return Result{Out: "recording 0:00"}
-	})
-	if text := m.View(); strings.Contains(text, "ctrl+c") || strings.Contains(text, "1      start") {
-		t.Fatalf("shortcuts on the screen:\n%s", text)
+func TestTheScreenListsTheActions(t *testing.T) {
+	m := newModel(func(string) Result { return Result{Out: "idle"} })
+	m.working = ""
+	text := m.View()
+	for _, line := range []string{"> " + bold + "start" + reset, "  pause", "  resume", "  stop and save, camera stays open", "  fill the recording with you", "  save and close", "status"} {
+		if !strings.Contains(text, line) {
+			t.Fatalf("missing %q\n%s", line, text)
+		}
 	}
-	m = press(t, m, "?")
-	if text := m.View(); !strings.Contains(text, "1      start") || !strings.Contains(text, "space  start or stop") || strings.Contains(text, "status") {
-		t.Fatalf("shortcuts:\n%s", text)
+	if strings.Contains(text, "1      start") || strings.Contains(text, "ctrl+c") {
+		t.Fatalf("shortcut page:\n%s", text)
 	}
-	for _, s := range []string{"1", "2", "4", "5", "6", " ", "r"} {
-		m = press(t, m, s)
+	m = press(t, m, "j")
+	if !strings.Contains(m.View(), "> "+bold+"pause"+reset) || m.cursor != 1 {
+		t.Fatalf("j:\n%s", m.View())
 	}
-	if len(asked) != 0 || m.quitting {
-		t.Fatalf("keys acted under the shortcut list: %v", asked)
+	m = press(t, m, "k")
+	m = press(t, m, "k")
+	if !strings.Contains(m.View(), "> "+bold+"save and close"+reset) || m.cursor != 5 {
+		t.Fatalf("k wraps:\n%s", m.View())
 	}
-	m = press(t, m, "?")
-	if text := m.View(); strings.Contains(text, "1      start") || !strings.Contains(text, "status") {
-		t.Fatalf("after the second ?:\n%s", text)
+	m = press(t, m, "j")
+	if m.cursor != 0 {
+		t.Fatalf("j wraps: %d", m.cursor)
 	}
 }
 
-func TestKeysSendTheCommands(t *testing.T) {
+func TestEnterRunsTheSelectedAction(t *testing.T) {
 	var asked []string
 	replies := map[string]string{"start": "recording 0:00", "focus": "recording 0:03 focus", "stop": "/home/ryan/Videos/c.mp4", "pause": "busy"}
 	m := newModel(func(command string) Result {
@@ -264,23 +266,31 @@ func TestKeysSendTheCommands(t *testing.T) {
 		return Result{Out: replies[command]}
 	})
 	m.working = ""
-	m = press(t, m, "1")
+	m = press(t, m, "enter")
 	if text := m.View(); !strings.Contains(text, "recording 0:00") || !strings.Contains(text, "in the corner") {
-		t.Fatalf("after 1:\n%s", text)
+		t.Fatalf("after start:\n%s", text)
 	}
-	m = press(t, m, "5")
-	if text := m.View(); !strings.Contains(text, "fills the screen") {
-		t.Fatalf("after 5:\n%s", text)
+	for range 4 {
+		m = press(t, m, "j")
 	}
-	m = press(t, m, "2")
-	if text := m.View(); !strings.Contains(text, "busy") {
-		t.Fatalf("after 2:\n%s", text)
+	m = press(t, m, "enter")
+	if text := m.View(); !strings.Contains(text, "fills the screen") || !strings.Contains(text, "put the camera back in the corner") {
+		t.Fatalf("after you:\n%s", text)
 	}
-	m = press(t, m, "4")
-	if text := m.View(); !strings.Contains(text, "saved   /home/ryan/Videos/c.mp4") {
-		t.Fatalf("after 4:\n%s", text)
+	for range 3 {
+		m = press(t, m, "k")
+	}
+	m = press(t, m, "enter")
+	if !strings.Contains(m.View(), "busy") {
+		t.Fatalf("after pause:\n%s", m.View())
 	}
 	m = press(t, m, "j")
+	m = press(t, m, "j")
+	m = press(t, m, "enter")
+	if !strings.Contains(m.View(), "saved   /home/ryan/Videos/c.mp4") {
+		t.Fatalf("after stop:\n%s", m.View())
+	}
+	m = press(t, m, "1")
 	if strings.Join(asked, " ") != "start focus pause stop" {
 		t.Fatalf("asked %v", asked)
 	}
@@ -288,7 +298,9 @@ func TestKeysSendTheCommands(t *testing.T) {
 
 func TestAFailedCommandShowsItsText(t *testing.T) {
 	m := newModel(func(string) Result { return Result{Err: notOpen, Code: 1} })
-	m = press(t, m, "3")
+	m = press(t, m, "j")
+	m = press(t, m, "j")
+	m = press(t, m, "enter")
 	if text := m.View(); !strings.Contains(text, "error   ") || !strings.Contains(text, notOpen) || !strings.Contains(text, "closed") {
 		t.Fatalf("%s", text)
 	}
@@ -300,21 +312,38 @@ func TestAFailedCommandShowsItsText(t *testing.T) {
 }
 
 func TestQuitSavesThenLeaves(t *testing.T) {
-	for _, s := range []string{"q", "6"} {
-		var asked []string
-		m := newModel(func(command string) Result {
-			asked = append(asked, command)
-			return Result{Out: "/home/ryan/Videos/d.mp4"}
-		})
+	var asked []string
+	m := newModel(func(command string) Result {
+		asked = append(asked, command)
+		return Result{Out: "/home/ryan/Videos/d.mp4"}
+	})
+	m.cursor = 5
+	next, cmd := m.Update(key("enter"))
+	m = next.(model)
+	if !m.quitting || cmd == nil {
+		t.Fatalf("enter on save and close did not quit")
+	}
+	next, cmd = m.Update(cmd())
+	m = next.(model)
+	if cmd == nil || m.final.Out != "/home/ryan/Videos/d.mp4" || strings.Join(asked, " ") != "quit" {
+		t.Fatalf("final %+v asked %v", m.final, asked)
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("save and close did not leave")
+	}
+}
+
+func TestQLeavesTheCameraAsItIs(t *testing.T) {
+	var asked []string
+	m := newModel(func(command string) Result {
+		asked = append(asked, command)
+		return Result{Out: "recording 0:01"}
+	})
+	for _, s := range []string{"q", "ctrl+c"} {
 		next, cmd := m.Update(key(s))
-		m = next.(model)
-		if !m.quitting || cmd == nil {
-			t.Fatalf("%s did not quit", s)
-		}
-		next, cmd = m.Update(cmd())
-		m = next.(model)
-		if cmd == nil || m.final.Out != "/home/ryan/Videos/d.mp4" || strings.Join(asked, " ") != "quit" {
-			t.Fatalf("%s: final %+v asked %v", s, m.final, asked)
+		got := next.(model)
+		if got.quitting || len(asked) != 0 || cmd == nil {
+			t.Fatalf("%s quitting %v asked %v", s, got.quitting, asked)
 		}
 		if _, ok := cmd().(tea.QuitMsg); !ok {
 			t.Fatalf("%s did not leave", s)
@@ -331,7 +360,7 @@ func TestStatusPollsOnTheTickAndOnR(t *testing.T) {
 		return Result{Out: "paused 0:07"}
 	})
 	m.working = ""
-	for _, s := range []string{"x", "j", "?", "?"} {
+	for _, s := range []string{"x", "j", "k", "1"} {
 		m = press(t, m, s)
 	}
 	if polls != 0 {

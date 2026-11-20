@@ -13,30 +13,12 @@ const (
 	reset   = "\x1b[0m"
 )
 
-const shortcuts = `rec
-
-1      start
-2      pause
-3      resume
-4      stop and save, camera stays open
-5      camera in the corner or filling the screen
-space  start or stop
-6      save and close the camera and this screen
-q      save and close the camera and this screen
-r      reload
-?      shortcuts
-ctrl+c leave this screen, camera as it is
-`
-
 var working = map[string]string{
 	"open": "opening the camera", "start": "starting", "pause": "pausing", "resume": "resuming",
 	"stop": "saving", "focus": "moving the camera", "toggle": "starting or saving", "quit": "saving and closing",
 }
 
 func (m model) View() string {
-	if m.help {
-		return shortcuts
-	}
 	var b strings.Builder
 	b.WriteString(bold + "rec" + reset + "\n\n")
 	fmt.Fprintf(&b, "status  %s\n", paintWord(m.word, m.clock))
@@ -50,6 +32,16 @@ func (m model) View() string {
 	}
 	if m.working != "" {
 		fmt.Fprintf(&b, "\n%s%s%s\n", dim, working[m.working], reset)
+	}
+	b.WriteString("\n")
+	for i, row := range m.items() {
+		mark := "  "
+		label := row.label
+		if i == m.cursor {
+			mark = "> "
+			label = bold + label + reset
+		}
+		fmt.Fprintf(&b, "%s%s\n", mark, label)
 	}
 	return b.String()
 }

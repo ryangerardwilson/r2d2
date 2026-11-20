@@ -37,11 +37,9 @@ closes the camera. status, pause, resume, and stop print rec is not open
 and exit 1 when the camera is closed. Without a terminal, r2d2 rec opens
 the camera and exits 0. On a terminal, this screen is the control system.
 
-The screen shows the status, the clock, whether the camera is in the
-corner or fills the screen, and the last error or saved file. 1 starts,
-2 pauses, 3 resumes, 4 stops and saves, 5 switches corner and full screen,
-space starts or stops, r reloads, ? shows the shortcuts. 6 and q save the
-take and close the camera and this screen. ctrl+c leaves the camera as it is.
+The screen lists start, pause, resume, stop and save, fill the recording
+with you, and save and close. j and k move through that list. Enter runs
+the selected one. q and ctrl+c leave this screen and leave the camera as it is.
 `
 
 var commands = map[string]bool{

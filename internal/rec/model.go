@@ -17,7 +17,7 @@ type model struct {
 	working  string
 	seq      int
 	polling  bool
-	help     bool
+	cursor   int
 	quitting bool
 	final    Result
 }
@@ -30,11 +30,6 @@ type done struct {
 	seq     int
 	command string
 	res     Result
-}
-
-var keyCommands = map[string]string{
-	"1": "start", "2": "pause", "3": "resume", "4": "stop", "5": "focus", " ": "toggle",
-	"6": "quit", "q": "quit",
 }
 
 func newModel(do func(string) Result) model {
@@ -85,37 +80,74 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
+type item struct {
+	command string
+	label   string
+}
+
+// items are the rows on the screen. The focus row names what Enter will do.
+func (m model) items() []item {
+	you := "fill the recording with you"
+	if m.focus {
+		you = "put the camera back in the corner"
+	}
+	return []item{
+		{"start", "start"},
+		{"pause", "pause"},
+		{"resume", "resume"},
+		{"stop", "stop and save, camera stays open"},
+		{"focus", you},
+		{"quit", "save and close"},
+	}
+}
+
 func (m model) key(key string) (tea.Model, tea.Cmd) {
-	if key == "ctrl+c" {
+	if m.quitting {
+		if key == "ctrl+c" {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+	if key == "ctrl+c" || key == "q" {
 		return m, tea.Quit
 	}
-	if m.quitting {
-		return m, nil
-	}
+	rows := m.items()
 	switch key {
-	case "?":
-		m.help = !m.help
+	case "j", "down":
+		m.cursor = cycled(m.cursor, 1, len(rows))
 		return m, nil
-	case "esc":
-		m.help = false
+	case "k", "up":
+		m.cursor = cycled(m.cursor, -1, len(rows))
 		return m, nil
-	}
-	if m.help && key != "q" {
+	case "g", "home":
+		m.cursor = 0
 		return m, nil
-	}
-	if key == "r" {
+	case "G", "end":
+		m.cursor = len(rows) - 1
+		return m, nil
+	case "r":
 		return m.poll()
+	case "enter":
+		return m.run(rows[m.cursor].command)
 	}
-	command, ok := keyCommands[key]
-	if !ok {
-		return m, nil
-	}
+	return m, nil
+}
+
+func (m model) run(command string) (tea.Model, tea.Cmd) {
 	if command == "quit" {
-		m.quitting, m.help = true, false
+		m.quitting = true
 	}
 	m.seq++
 	m.working = command
 	return m, send(m.seq, command, m.do)
+}
+
+func cycled(cursor, delta, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	cursor = min(max(cursor, 0), n-1)
+	return (cursor + delta%n + n) % n
 }
 
 func (m model) finish(msg done) (tea.Model, tea.Cmd) {
