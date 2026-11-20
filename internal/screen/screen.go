@@ -7,9 +7,9 @@ import (
 	c3poscreen "github.com/ryangerardwilson/c3po/screen"
 )
 
-// Names are the screens r2d2 opens. web is implemented here. The others
-// run in this process through the c3po screen package.
-var Names = []string{"web", "cyclotree", "l", "o", "tunnel", "gdrive", "pass", "deport", "xl", "looptab", "slack"}
+// Names are the screens r2d2 opens. web, health, and musica are implemented
+// here. The others run in this process through the c3po screen package.
+var Names = []string{"web", "cyclotree", "l", "o", "tunnel", "gdrive", "pass", "deport", "xl", "looptab", "slack", "health", "musica"}
 
 // Known reports whether name is a screen.
 func Known(name string) bool {
@@ -21,10 +21,16 @@ func Known(name string) bool {
 	return false
 }
 
-// Launch runs a screen that lives in c3po. web is not launched here.
-// Arguments after the screen name, including --resume, are passed through.
+// Own reports whether r2d2 runs the screen itself rather than through c3po.
+func Own(name string) bool {
+	return name == "web" || name == "health" || name == "musica"
+}
+
+// Launch runs a screen that lives in c3po. web, health, and musica are not
+// launched here. Arguments after the screen name, including --resume, are
+// passed through.
 func Launch(name string, args []string, stdout, stderr io.Writer) int {
-	if name == "web" || !Known(name) {
+	if Own(name) || !Known(name) {
 		fmt.Fprintf(stderr, "unknown screen %q\n", name)
 		return 2
 	}

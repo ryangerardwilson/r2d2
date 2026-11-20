@@ -25,6 +25,8 @@ var blurbs = map[string]string{
 	"xl":        "spreadsheet for a budget workbook",
 	"looptab":   "Looptab jobs, run one now",
 	"slack":     "direct messages, tags, and what to know",
+	"health":    "background jobs and nebula backups",
+	"musica":    "player, cassettes, and downloads",
 }
 
 type model struct {

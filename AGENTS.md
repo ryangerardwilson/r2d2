@@ -8,8 +8,10 @@ Running `r2d2` on a terminal opens the screen menu. `j` and `k` move, Enter open
 
 Essays and long prose open in vim with `-c Wrap`. The saved text joins wrapped lines back into paragraphs. A blank line is a paragraph break. The first paragraph is the title.
 
-Screens other than `web` run in this process through `github.com/ryangerardwilson/c3po/screen`. Require the published c3po and nebula modules. Do not add a `replace` directive.
+`r2d2 health` reads systemd user units, nebula s3 objects (with `s3x.Stat`, never a download), and `nebula run list`. It never restarts or repairs anything. `r2d2 musica` calls `player.Run` from `github.com/ryangerardwilson/musica/player`. The player source stays in the musica repo.
+
+Screens other than `web`, `health`, and `musica` run in this process through `github.com/ryangerardwilson/c3po/screen`. Require the published c3po, nebula, and musica modules. Do not add a `replace` directive.
 
 Do not add this module to the home `go.work`. Test with `GOWORK=off go test ./...`. Install with `bash install.sh` from this checkout. Work and commit inside this Git root.
 
-The accepted behavior is `openspec/specs/r2d2/spec.md`.
+The accepted behavior is `openspec/specs/r2d2/spec.md`, `openspec/specs/health/spec.md`, and `openspec/specs/musica-screen/spec.md`.

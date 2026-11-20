@@ -41,3 +41,29 @@ func TestVersion(t *testing.T) {
 		t.Fatalf("%d %q", code, out.String())
 	}
 }
+
+func TestHelpNamesHealthAndMusica(t *testing.T) {
+	var out, err bytes.Buffer
+	if code := Run([]string{"r2d2", "help"}, &out, &err); code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	for _, want := range []string{"r2d2 health", "r2d2 musica", "background jobs and nebula backups", "player, cassettes, and downloads"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("missing %q\n%s", want, out.String())
+		}
+	}
+}
+
+func TestHealthHelpWithoutATerminal(t *testing.T) {
+	var out, err bytes.Buffer
+	if code := Run([]string{"r2d2", "health", "help"}, &out, &err); code != 0 || !strings.Contains(out.String(), "r2d2 health") || !strings.Contains(out.String(), "never restarts") {
+		t.Fatalf("code %d\n%s", code, out.String())
+	}
+}
+
+func TestMusicaHelpIsThePlayerHelp(t *testing.T) {
+	var out, err bytes.Buffer
+	if code := Run([]string{"r2d2", "musica", "help"}, &out, &err); code != 0 || !strings.Contains(out.String(), "musica terminal music player") || !strings.Contains(out.String(), "r2d2 musica") {
+		t.Fatalf("code %d\n%s%s", code, out.String(), err.String())
+	}
+}

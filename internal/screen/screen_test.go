@@ -26,7 +26,16 @@ func TestLaunchPassesTheScreenArguments(t *testing.T) {
 }
 
 func TestWebIsAScreenAndNlpIsNot(t *testing.T) {
-	if !Known("web") || !Known("looptab") || !Known("slack") || Known("nlp") {
+	if !Known("web") || !Known("looptab") || !Known("slack") || !Known("health") || !Known("musica") || Known("nlp") {
 		t.Fatal("screen list")
+	}
+}
+
+func TestHealthAndMusicaAreNotSentToC3po(t *testing.T) {
+	for _, name := range []string{"web", "health", "musica"} {
+		var out, errb bytes.Buffer
+		if code := Launch(name, []string{"help"}, &out, &errb); code != 2 || !bytes.Contains(errb.Bytes(), []byte("unknown screen")) {
+			t.Fatalf("%s %d\n%s", name, code, out.String()+errb.String())
+		}
 	}
 }

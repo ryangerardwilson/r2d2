@@ -3,7 +3,10 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 
+	"github.com/ryangerardwilson/musica/player"
+	"github.com/ryangerardwilson/r2d2/internal/health"
 	"github.com/ryangerardwilson/r2d2/internal/menu"
 	"github.com/ryangerardwilson/r2d2/internal/screen"
 	"github.com/ryangerardwilson/r2d2/internal/version"
@@ -27,6 +30,10 @@ const Help = `r2d2 is the terminal program. c3po is the agent CLI.
   r2d2 xl [file]
   r2d2 looptab
   r2d2 slack
+  r2d2 health
+    whether background jobs and nebula backups are working
+  r2d2 musica [args...]
+    the musica player; end, play, open, config, and help pass through
   r2d2 version
   r2d2 help
 
@@ -42,6 +49,8 @@ screens:
   xl           spreadsheet for a budget workbook
   looptab      Looptab jobs, run one now
   slack        direct messages, tags, and what to know
+  health       background jobs and nebula backups
+  musica       player, cassettes, and downloads
 
 A pipe prints this text. A terminal opens the menu. j and k move, Enter
 opens the screen, and q quits.
@@ -72,8 +81,13 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	name := rest[0]
-	if name == "web" {
+	switch name {
+	case "web":
 		return web.Run(rest[1:], stdout, stderr)
+	case "health":
+		return health.Run(rest[1:], stdout, stderr)
+	case "musica":
+		return player.Run(rest[1:], os.Stdin, stdout, stderr)
 	}
 	if !screen.Known(name) {
 		fmt.Fprintf(stderr, "unknown screen %q\n", name)

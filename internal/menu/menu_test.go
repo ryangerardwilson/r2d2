@@ -34,6 +34,15 @@ func TestMenuMovesDownAndStops(t *testing.T) {
 	}
 }
 
+func TestMenuListsHealthAndMusica(t *testing.T) {
+	text := model{}.View()
+	for _, want := range []string{"health       background jobs and nebula backups", "musica       player, cassettes, and downloads"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q\n%s", want, text)
+		}
+	}
+}
+
 func TestMenuHidesShortcutsUntilQuestionMark(t *testing.T) {
 	text := model{}.View()
 	if strings.Contains(text, "j/k") || strings.Contains(text, "quit") {
