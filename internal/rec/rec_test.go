@@ -180,7 +180,7 @@ func TestSizeIsRemembered(t *testing.T) {
 
 func TestHelpAndUnknownWords(t *testing.T) {
 	code, out, _ := runFake(t, &fake{}, false, "help")
-	if code != 0 || !strings.Contains(out, "r2d2 rec") || !strings.Contains(out, "Super+R") || !strings.Contains(out, "never draws it") {
+	if code != 0 || !strings.Contains(out, "r2d2 rec") || !strings.Contains(out, "control system") || !strings.Contains(out, "never draws it") {
 		t.Fatalf("code %d\n%s", code, out)
 	}
 	if code, _, errText := runFake(t, &fake{}, false, "record"); code != 2 || !strings.Contains(errText, "record") {

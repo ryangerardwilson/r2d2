@@ -35,7 +35,7 @@ camera, and again puts it back in the corner, in the same file.
 stop saves the take and keeps the camera open. quit saves the take and
 closes the camera. status, pause, resume, and stop print rec is not open
 and exit 1 when the camera is closed. Without a terminal, r2d2 rec opens
-the camera and exits 0. That is what Super+R runs.
+the camera and exits 0. On a terminal, this screen is the control system.
 
 The screen shows the status, the clock, whether the camera is in the
 corner or fills the screen, and the last error or saved file. 1 starts,
