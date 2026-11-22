@@ -87,6 +87,7 @@ func TestEditWithNothingRegisteredUsesTheC3poTemplate(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("C3PO_SQLX", "off")
 	e := editor{
 		lookVim:  func() (string, error) { return "vim", nil },
