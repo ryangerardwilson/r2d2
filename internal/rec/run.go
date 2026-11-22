@@ -1,6 +1,7 @@
 package rec
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -56,12 +57,13 @@ type deps struct {
 	tty    bool
 	sleep  func(time.Duration)
 	screen func(Client, io.Writer) (Result, error)
+	config string
 }
 
 // Run opens r2d2 rec.
 func Run(args []string, stdout, stderr io.Writer) int {
 	tty := isTerminal(os.Stdin) && isTerminal(stdout)
-	return run(args, stdout, stderr, deps{widget: live{}, tty: tty, screen: runScreen})
+	return run(args, stdout, stderr, deps{widget: live{}, tty: tty, screen: runScreen, config: configHome()})
 }
 
 type request struct {
@@ -82,11 +84,9 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprint(stdout, Help)
 		return 0
 	}
-	if req.size != "" {
-		if err := saveSize(req.size); err != nil {
-			fmt.Fprintf(stderr, "r2d2 rec: %s\n", err.Error())
-			return 1
-		}
+	if err := keepSize(d.config, req.size); err != nil {
+		fmt.Fprintf(stderr, "r2d2 rec: %s\n", err.Error())
+		return 1
 	}
 	client := Client{Widget: d.widget, Sleep: d.sleep, Flags: req.flags}
 	if req.command == "" && d.tty {
@@ -147,17 +147,47 @@ func parse(args []string) (request, error) {
 	return req, nil
 }
 
-// saveSize writes the camera size where rec.py reads it.
-func saveSize(name string) error {
+// configHome is $XDG_CONFIG_HOME when it is absolute, otherwise ~/.config.
+// It is empty when there is no home.
+func configHome() string {
+	if base := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(base) {
+		return base
+	}
 	home, err := os.UserHomeDir()
-	if err != nil {
+	if err != nil || home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".config")
+}
+
+// keepSize copies the size rec kept before it was an r2d2 screen,
+// <config>/rec/size, once when <config>/r2d2/rec/size is absent, and leaves
+// the old file in place. Then it writes name there. rec.py reads that file.
+func keepSize(config, name string) error {
+	if config == "" {
+		return errors.New("no config directory: set HOME or XDG_CONFIG_HOME")
+	}
+	path := filepath.Join(config, "r2d2", "rec", "size")
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		if data, err := os.ReadFile(filepath.Join(config, "rec", "size")); err == nil {
+			if err := writeSize(path, data); err != nil {
+				return err
+			}
+		}
+	} else if err != nil {
 		return err
 	}
-	path := filepath.Join(home, ".config", "rec", "size")
+	if name == "" {
+		return nil
+	}
+	return writeSize(path, []byte(name+"\n"))
+}
+
+func writeSize(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(name+"\n"), 0o644)
+	return os.WriteFile(path, data, 0o644)
 }
 
 func runScreen(client Client, stdout io.Writer) (Result, error) {

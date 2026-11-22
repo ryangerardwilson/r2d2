@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -133,6 +134,30 @@ class RecTests(unittest.TestCase):
                     os.environ.pop("OMARCHY_SCREENRECORD_DIR", None)
                 else:
                     os.environ["OMARCHY_SCREENRECORD_DIR"] = previous
+
+    def test_config_path_is_the_r2d2_rec_size(self):
+        with tempfile.TemporaryDirectory() as home:
+            env = {"HOME": home, "XDG_CONFIG_HOME": ""}
+            with unittest.mock.patch.dict(os.environ, env):
+                self.assertEqual(rec.config_path(), Path(home) / ".config" / "r2d2" / "rec" / "size")
+            env["XDG_CONFIG_HOME"] = "relative"
+            with unittest.mock.patch.dict(os.environ, env):
+                self.assertEqual(rec.config_path(), Path(home) / ".config" / "r2d2" / "rec" / "size")
+            env["XDG_CONFIG_HOME"] = "/xdg"
+            with unittest.mock.patch.dict(os.environ, env):
+                self.assertEqual(rec.config_path(), Path("/xdg/r2d2/rec/size"))
+
+    def test_load_size_reads_only_the_r2d2_file(self):
+        with tempfile.TemporaryDirectory() as home:
+            old = Path(home) / ".config" / "rec" / "size"
+            old.parent.mkdir(parents=True)
+            old.write_text("large\n")
+            with unittest.mock.patch.dict(os.environ, {"HOME": home, "XDG_CONFIG_HOME": ""}):
+                self.assertEqual(rec.load_size(), "small")
+                new = rec.config_path()
+                new.parent.mkdir(parents=True)
+                new.write_text("medium\n")
+                self.assertEqual(rec.load_size(), "medium")
 
     def test_rec_internal_does_not_hand_off_to_r2d2(self):
         self.assertIsNone(rec.r2d2_argv(["start"], {"REC_INTERNAL": "1"}))

@@ -187,8 +187,11 @@ def covers_monitor(client: dict, monitor: dict) -> bool:
 
 
 def config_path() -> Path:
-    # r2d2 rec owns this file: it writes --size here. The widget only reads it.
-    return Path.home() / ".config" / "rec" / "size"
+    # r2d2 rec owns this file: it writes --size here and copies the old
+    # ~/.config/rec/size once. The widget only reads it.
+    base = os.environ.get("XDG_CONFIG_HOME", "")
+    root = Path(base) if os.path.isabs(base) else Path.home() / ".config"
+    return root / "r2d2" / "rec" / "size"
 
 
 def load_size() -> str:

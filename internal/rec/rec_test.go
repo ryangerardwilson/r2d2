@@ -74,8 +74,13 @@ func noScreen(t *testing.T) func(Client, io.Writer) (Result, error) {
 
 func runFake(t *testing.T, f *fake, tty bool, args ...string) (int, string, string) {
 	t.Helper()
+	return runFakeIn(t, t.TempDir(), f, tty, args...)
+}
+
+func runFakeIn(t *testing.T, config string, f *fake, tty bool, args ...string) (int, string, string) {
+	t.Helper()
 	var out, errb bytes.Buffer
-	code := run(args, &out, &errb, deps{widget: f, tty: tty, sleep: func(time.Duration) {}, screen: noScreen(t)})
+	code := run(args, &out, &errb, deps{widget: f, tty: tty, sleep: func(time.Duration) {}, screen: noScreen(t), config: config})
 	return code, out.String(), errb.String()
 }
 
@@ -107,7 +112,7 @@ func TestATerminalOpensTheScreen(t *testing.T) {
 	code := run(nil, &out, &errb, deps{widget: f, tty: true, screen: func(Client, io.Writer) (Result, error) {
 		opened = true
 		return Result{Out: "/home/ryan/Videos/a.mp4"}, nil
-	}})
+	}, config: t.TempDir()})
 	if code != 0 || !opened || out.String() != "/home/ryan/Videos/a.mp4\n" {
 		t.Fatalf("code %d opened %v out %q", code, opened, out.String())
 	}
@@ -175,18 +180,66 @@ func TestFocusOpensTheCameraFillingTheScreen(t *testing.T) {
 }
 
 func TestSizeIsRemembered(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	config := t.TempDir()
 	f := &fake{open: true, replies: map[string]string{"status": "idle"}}
-	if code, _, _ := runFake(t, f, false, "--size=medium", "status"); code != 0 {
+	if code, _, _ := runFakeIn(t, config, f, false, "--size=medium", "status"); code != 0 {
 		t.Fatalf("code %d", code)
 	}
-	data, err := os.ReadFile(filepath.Join(home, ".config", "rec", "size"))
+	data, err := os.ReadFile(filepath.Join(config, "r2d2", "rec", "size"))
 	if err != nil || string(data) != "medium\n" {
 		t.Fatalf("%q %v", data, err)
 	}
-	if code, _, _ := runFake(t, f, false, "--size", "huge"); code != 2 {
+	if _, err := os.Stat(filepath.Join(config, "rec")); !os.IsNotExist(err) {
+		t.Fatalf("old size directory was written: %v", err)
+	}
+	if code, _, _ := runFakeIn(t, config, f, false, "--size", "huge"); code != 2 {
 		t.Fatalf("bad size %d", code)
+	}
+}
+
+func TestOldSizeIsCopiedOnce(t *testing.T) {
+	config := t.TempDir()
+	old := filepath.Join(config, "rec", "size")
+	if err := os.MkdirAll(filepath.Dir(old), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(old, []byte("large\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := &fake{open: true, replies: map[string]string{"status": "idle"}}
+	if code, _, errText := runFakeIn(t, config, f, false, "status"); code != 0 {
+		t.Fatalf("code %d %s", code, errText)
+	}
+	path := filepath.Join(config, "r2d2", "rec", "size")
+	if data, err := os.ReadFile(path); err != nil || string(data) != "large\n" {
+		t.Fatalf("copied %q %v", data, err)
+	}
+	if err := os.WriteFile(old, []byte("small\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, _ := runFakeIn(t, config, f, false, "status"); code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	if data, _ := os.ReadFile(path); string(data) != "large\n" {
+		t.Fatalf("copied again %q", data)
+	}
+	if data, _ := os.ReadFile(old); string(data) != "small\n" {
+		t.Fatalf("old size %q", data)
+	}
+}
+
+func TestConfigHomeHonorsAnAbsoluteXDGConfigHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+	if got := configHome(); got != "/xdg" {
+		t.Fatalf("xdg %q", got)
+	}
+	for _, xdg := range []string{"", "relative"} {
+		t.Setenv("XDG_CONFIG_HOME", xdg)
+		if got := configHome(); got != filepath.Join(home, ".config") {
+			t.Fatalf("%q gave %q", xdg, got)
+		}
 	}
 }
 
