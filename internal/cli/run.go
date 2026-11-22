@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/ryangerardwilson/musica/player"
 	"github.com/ryangerardwilson/r2d2/internal/health"
@@ -15,7 +16,10 @@ import (
 )
 
 // Help is the r2d2 help. A terminal opens the menu instead of printing it.
-const Help = `r2d2 is the terminal program. c3po is the agent CLI.
+// The screen list comes from screen.Screens, which the menu also reads.
+var Help = helpUsage + "screens:\n" + screenLines() + "\n" + helpTail
+
+const helpUsage = `r2d2 is the terminal program. c3po is the agent CLI.
 
   r2d2
     open the screen menu
@@ -40,28 +44,22 @@ const Help = `r2d2 is the terminal program. c3po is the agent CLI.
   r2d2 version
   r2d2 help
 
-screens:
-  web          ryangerardwilson.com admin panel
-  cyclotree    calls of one function, as a tree you move with hjkl
-  l            compact gray tree of a directory
-  o            vim-inspired file navigator
-  tunnel       Cloudflare Tunnel route editor
-  gdrive       Drive preset, then browse
-  pass         1Password vaults, then copy one item
-  deport       occupied external ports, freed with dd
-  xl           spreadsheet for a budget workbook
-  looptab      Looptab jobs, run one now
-  slack        direct messages, tags, and what to know
-  health       background jobs and nebula backups
-  musica       player, cassettes, and downloads
-  rec          screen recorder and camera
+`
 
-A pipe prints this text. A terminal opens the menu. j and k move, Enter
+const helpTail = `A pipe prints this text. A terminal opens the menu. j and k move, Enter
 opens the screen, and q quits.
 r2d2 web reads the admin API key with nebula crypt. Essays open in vim
 with :Wrap, and the saved text is a flowing paragraph.
 r2d2 <screen> help explains one screen.
 `
+
+func screenLines() string {
+	var b strings.Builder
+	for _, s := range screen.Screens {
+		b.WriteString("  " + s.Line() + "\n")
+	}
+	return b.String()
+}
 
 // Run dispatches one screen.
 func Run(args []string, stdout, stderr io.Writer) int {

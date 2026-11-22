@@ -9,8 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/ryangerardwilson/nebula/s3x"
 )
 
 // State is the word a row shows.
@@ -40,18 +38,30 @@ type Unit struct {
 	Scheduled   bool
 }
 
+// Process is one process nebula hosts. Host, Port, and Release are empty
+// when nebula did not list them.
+type Process struct {
+	Name    string
+	Host    string
+	Port    string
+	Release string
+}
+
 // Checker reads what the screen shows. It must not change anything.
 type Checker interface {
 	Unit(ctx context.Context, name string) (Unit, error)
 	Stat(ctx context.Context, bucket, key string) (time.Time, error)
 	Keys(ctx context.Context, bucket string) ([]string, error)
-	Hosted(ctx context.Context) (string, error)
+	Hosted(ctx context.Context) ([]Process, error)
 }
 
-// timeout bounds each systemctl, s3, and ssh call.
-var timeout = 5 * time.Second
+// timeout bounds each systemctl, s3, and ssh call. A caller's earlier deadline wins.
+const timeout = 5 * time.Second
 
 var errTimeout = errors.New("timed out")
+
+// ErrMissing is what a Checker's Stat returns when the object does not exist.
+var ErrMissing = errors.New("missing")
 
 // Check runs every check at once and returns the rows in catalog order,
 // then one row per hosted process.
@@ -178,7 +188,7 @@ func objectRow(ctx context.Context, c Checker, item check, now time.Time) Row {
 	mtime, err := bounded(ctx, func(ctx context.Context) (time.Time, error) {
 		return c.Stat(ctx, item.bucket, item.key)
 	})
-	if errors.Is(err, s3x.ErrNotFound) {
+	if errors.Is(err, ErrMissing) {
 		if item.kind == skippable {
 			return Row{item.title(), Waiting, "missing; " + item.why}
 		}
@@ -224,31 +234,25 @@ func newestDay(keys []string) (time.Time, string) {
 }
 
 func hostedRows(ctx context.Context, c Checker) []Row {
-	out, err := bounded(ctx, c.Hosted)
+	processes, err := bounded(ctx, c.Hosted)
 	if err != nil {
 		return []Row{{"nebula run", Down, reason(err)}}
 	}
-	var rows []Row
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 0 || strings.TrimSpace(line) == "no apps" {
-			continue
-		}
-		rows = append(rows, Row{"run " + fields[0], OK, hostedReason(fields[1:])})
-	}
-	if len(rows) == 0 {
+	if len(processes) == 0 {
 		return []Row{{"nebula run", OK, "no hosted processes"}}
+	}
+	rows := make([]Row, 0, len(processes))
+	for _, p := range processes {
+		rows = append(rows, Row{"run " + p.Name, OK, hostedReason(p)})
 	}
 	return rows
 }
 
-// hostedReason reads the name, hostname, port, and release columns of
-// nebula run list after the name.
-func hostedReason(fields []string) string {
-	if len(fields) < 3 {
-		return "listed " + strings.Join(fields, " ")
+func hostedReason(p Process) string {
+	if p.Port == "" {
+		return "listed"
 	}
-	return fields[0] + " port " + fields[1] + ", release " + strings.Join(fields[2:], " ")
+	return p.Host + " port " + p.Port + ", release " + p.Release
 }
 
 func failed(u Unit) bool {

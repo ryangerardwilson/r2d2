@@ -11,7 +11,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/ryangerardwilson/nebula/s3x"
 )
 
 var now = time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
@@ -43,18 +42,21 @@ func (f *fake) Stat(ctx context.Context, bucket, key string) (time.Time, error) 
 	if mtime, ok := f.objects[bucket+"/"+key]; ok {
 		return mtime, nil
 	}
-	return time.Time{}, fmt.Errorf("s3://%s/%s: %w", bucket, key, s3x.ErrNotFound)
+	return time.Time{}, fmt.Errorf("s3://%s/%s: %w", bucket, key, ErrMissing)
 }
 
 func (f *fake) Keys(_ context.Context, bucket string) ([]string, error) {
 	if keys, ok := f.keys[bucket]; ok {
 		return keys, nil
 	}
-	return nil, fmt.Errorf("bucket %s: %w", bucket, s3x.ErrNotFound)
+	return nil, fmt.Errorf("bucket %s: %w", bucket, ErrMissing)
 }
 
-func (f *fake) Hosted(context.Context) (string, error) {
-	return f.hosted, f.failRun
+func (f *fake) Hosted(context.Context) ([]Process, error) {
+	if f.failRun != nil {
+		return nil, f.failRun
+	}
+	return parseHosted(f.hosted), nil
 }
 
 func running() Unit { return Unit{Load: "loaded", Active: "active", Sub: "running", Result: "success"} }
@@ -182,13 +184,12 @@ func TestObjects(t *testing.T) {
 }
 
 func TestStatTimeoutIsDown(t *testing.T) {
-	old := timeout
-	timeout = 50 * time.Millisecond
-	defer func() { timeout = old }()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
 	f := healthy()
 	f.hang = map[string]bool{"backups/c3po.sqlite": true, "backups/crusade.sqlite": true}
 	start := time.Now()
-	rows := Check(context.Background(), f, now)
+	rows := Check(ctx, f, now)
 	if time.Since(start) > 500*time.Millisecond {
 		t.Fatalf("waited %s for a hung stat", time.Since(start))
 	}

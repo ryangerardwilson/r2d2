@@ -17,14 +17,13 @@ import (
 
 func emptyRecordings() []recording { return nil }
 
-func init() {
-	scanRecordings = emptyRecordings
+func recordings(rows ...recording) func() []recording {
+	return func() []recording { return rows }
 }
 
-func useRecordings(t *testing.T, rows []recording) {
-	t.Helper()
-	scanRecordings = func() []recording { return rows }
-	t.Cleanup(func() { scanRecordings = emptyRecordings })
+// testModel is the screen with no recordings.
+func testModel(do func(string) Result) model {
+	return newModel(do, emptyRecordings, playWithMpv)
 }
 
 // fake is a widget that answers from a script. Nothing here starts GTK, a camera, or the recorder.
@@ -245,7 +244,7 @@ func press(t *testing.T, m model, s string) model {
 }
 
 func TestTheScreenListsTheActions(t *testing.T) {
-	m := newModel(func(string) Result { return Result{Out: "idle"} })
+	m := testModel(func(string) Result { return Result{Out: "idle"} })
 	m.working = ""
 	text := m.View()
 	for _, line := range []string{"> " + bold + "start" + reset, "  pause", "  resume", "  stop and save, camera stays open", "  fill the recording with you", "  save and close", "status"} {
@@ -274,7 +273,7 @@ func TestTheScreenListsTheActions(t *testing.T) {
 func TestEnterRunsTheSelectedAction(t *testing.T) {
 	var asked []string
 	replies := map[string]string{"start": "recording 0:00", "focus": "recording 0:03 focus", "stop": "/home/ryan/Videos/c.mp4", "pause": "busy"}
-	m := newModel(func(command string) Result {
+	m := testModel(func(command string) Result {
 		asked = append(asked, command)
 		return Result{Out: replies[command]}
 	})
@@ -310,7 +309,7 @@ func TestEnterRunsTheSelectedAction(t *testing.T) {
 }
 
 func TestAFailedCommandShowsItsText(t *testing.T) {
-	m := newModel(func(string) Result { return Result{Err: notOpen, Code: 1} })
+	m := testModel(func(string) Result { return Result{Err: notOpen, Code: 1} })
 	m = press(t, m, "j")
 	m = press(t, m, "j")
 	m = press(t, m, "enter")
@@ -326,14 +325,14 @@ func TestAFailedCommandShowsItsText(t *testing.T) {
 
 func TestQuitSavesThenLeaves(t *testing.T) {
 	var asked []string
-	m := newModel(func(command string) Result {
+	m := testModel(func(command string) Result {
 		asked = append(asked, command)
 		return Result{Out: "/home/ryan/Videos/d.mp4"}
 	})
 	m.cursor = 5
 	next, cmd := m.Update(key("enter"))
 	m = next.(model)
-	if !m.quitting || cmd == nil {
+	if !m.quitting() || cmd == nil {
 		t.Fatalf("enter on save and close did not quit")
 	}
 	next, cmd = m.Update(cmd())
@@ -348,15 +347,15 @@ func TestQuitSavesThenLeaves(t *testing.T) {
 
 func TestQLeavesTheCameraAsItIs(t *testing.T) {
 	var asked []string
-	m := newModel(func(command string) Result {
+	m := testModel(func(command string) Result {
 		asked = append(asked, command)
 		return Result{Out: "recording 0:01"}
 	})
 	for _, s := range []string{"q", "ctrl+c"} {
 		next, cmd := m.Update(key(s))
 		got := next.(model)
-		if got.quitting || len(asked) != 0 || cmd == nil {
-			t.Fatalf("%s quitting %v asked %v", s, got.quitting, asked)
+		if got.quitting() || len(asked) != 0 || cmd == nil {
+			t.Fatalf("%s quitting %v asked %v", s, got.quitting(), asked)
 		}
 		if _, ok := cmd().(tea.QuitMsg); !ok {
 			t.Fatalf("%s did not leave", s)
@@ -366,7 +365,7 @@ func TestQLeavesTheCameraAsItIs(t *testing.T) {
 
 func TestStatusPollsOnTheTickAndOnR(t *testing.T) {
 	polls := 0
-	m := newModel(func(command string) Result {
+	m := testModel(func(command string) Result {
 		if command == "status" {
 			polls++
 		}
@@ -516,20 +515,19 @@ func TestVideosDirReadsUserDirs(t *testing.T) {
 
 func TestEnterPlaysTheNewerRecording(t *testing.T) {
 	var played []string
-	startPlayback = func(path string) error {
+	play := func(path string) error {
 		played = append(played, path)
 		return nil
 	}
-	t.Cleanup(func() { startPlayback = playWithMpv })
-	useRecordings(t, []recording{
-		{path: "/v/new.mp4", label: "newer"},
-		{path: "/v/old.mp4", label: "older"},
-	})
+	scan := recordings(
+		recording{path: "/v/new.mp4", label: "newer"},
+		recording{path: "/v/old.mp4", label: "older"},
+	)
 	var asked []string
 	m := newModel(func(command string) Result {
 		asked = append(asked, command)
 		return Result{Out: "idle"}
-	})
+	}, scan, play)
 	m.working = ""
 	if !strings.Contains(m.View(), dim+"recordings"+reset) || !strings.Contains(m.View(), "  newer") {
 		t.Fatalf("list:\n%s", m.View())
@@ -551,7 +549,7 @@ func TestEnterPlaysTheNewerRecording(t *testing.T) {
 		t.Fatalf("played %v asked %v kind %s note %s", played, asked, m.kind, m.note)
 	}
 	next, cmd := m.Update(key("q"))
-	if len(played) != 1 || len(asked) != 0 || next.(model).quitting || cmd == nil {
+	if len(played) != 1 || len(asked) != 0 || next.(model).quitting() || cmd == nil {
 		t.Fatalf("q played %v asked %v", played, asked)
 	}
 	if _, ok := cmd().(tea.QuitMsg); !ok {
@@ -561,12 +559,12 @@ func TestEnterPlaysTheNewerRecording(t *testing.T) {
 
 func TestAMissingPlayerShowsTheError(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	useRecordings(t, []recording{{path: "/v/new.mp4", label: "newer"}})
+	scan := recordings(recording{path: "/v/new.mp4", label: "newer"})
 	var asked []string
 	m := newModel(func(command string) Result {
 		asked = append(asked, command)
 		return Result{Out: "idle"}
-	})
+	}, scan, playWithMpv)
 	for range 6 {
 		m = press(t, m, "j")
 	}
@@ -581,14 +579,13 @@ func TestAMissingPlayerShowsTheError(t *testing.T) {
 
 func TestTheListRefreshesAfterAPollAndASave(t *testing.T) {
 	show := false
-	scanRecordings = func() []recording {
+	scan := func() []recording {
 		if !show {
 			return nil
 		}
 		return []recording{{path: "/v/new.mp4", label: "2026-11-20 08:18:49"}}
 	}
-	t.Cleanup(func() { scanRecordings = emptyRecordings })
-	m := newModel(func(string) Result { return Result{Out: "idle"} })
+	m := newModel(func(string) Result { return Result{Out: "idle"} }, scan, playWithMpv)
 	m.working = ""
 	if strings.Contains(m.View(), "recordings") {
 		t.Fatal("showed recordings too early")

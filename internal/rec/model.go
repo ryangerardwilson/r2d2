@@ -19,8 +19,10 @@ type model struct {
 	polling    bool
 	cursor     int
 	recordings []recording
-	quitting   bool
 	final      Result
+	// scan lists the recent recordings. playback opens one in its own window.
+	scan     func() []recording
+	playback func(path string) error
 }
 
 type tick struct{}
@@ -33,8 +35,8 @@ type done struct {
 	res     Result
 }
 
-func newModel(do func(string) Result) model {
-	m := model{do: do, word: "closed", working: "open"}
+func newModel(do func(string) Result, scan func() []recording, playback func(string) error) model {
+	m := model{do: do, word: "closed", working: "open", scan: scan, playback: playback}
 	m.reloadRecordings()
 	return m
 }
@@ -53,7 +55,7 @@ func send(seq int, command string, do func(string) Result) tea.Cmd {
 }
 
 func (m model) poll() (model, tea.Cmd) {
-	if m.polling || m.quitting {
+	if m.polling || m.quitting() {
 		return m, nil
 	}
 	m.polling = true
@@ -110,7 +112,7 @@ func (m model) items() []item {
 }
 
 func (m *model) reloadRecordings() {
-	m.recordings = scanRecordings()
+	m.recordings = m.scan()
 	if m.cursor < 0 {
 		m.cursor = 0
 	}
@@ -120,7 +122,7 @@ func (m *model) reloadRecordings() {
 }
 
 func (m model) key(key string) (tea.Model, tea.Cmd) {
-	if m.quitting {
+	if m.quitting() {
 		if key == "ctrl+c" {
 			return m, tea.Quit
 		}
@@ -156,7 +158,7 @@ func (m model) key(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m model) play(row item) (model, tea.Cmd) {
-	if err := startPlayback(row.path); err != nil {
+	if err := m.playback(row.path); err != nil {
 		m.note, m.kind = firstText(err.Error()), "error"
 		return m, nil
 	}
@@ -165,13 +167,14 @@ func (m model) play(row item) (model, tea.Cmd) {
 }
 
 func (m model) run(command string) (tea.Model, tea.Cmd) {
-	if command == "quit" {
-		m.quitting = true
-	}
 	m.seq++
 	m.working = command
 	return m, send(m.seq, command, m.do)
 }
+
+// quitting is true from save and close until the widget answers. No key can
+// run another command meanwhile, so working stays quit.
+func (m model) quitting() bool { return m.working == "quit" }
 
 func cycled(cursor, delta, n int) int {
 	if n <= 0 {

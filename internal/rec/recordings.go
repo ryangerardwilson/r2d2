@@ -19,12 +19,6 @@ type recording struct {
 	mod   time.Time
 }
 
-// scanRecordings is the list the screen shows. Tests replace it.
-var scanRecordings = scanVideos
-
-// startPlayback opens one recording in its own window. Tests replace it.
-var startPlayback = playWithMpv
-
 func scanVideos() []recording {
 	dir := videosDir()
 	entries, err := os.ReadDir(dir)

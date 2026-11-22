@@ -29,6 +29,9 @@ func (live) Unit(ctx context.Context, name string) (Unit, error) {
 
 func (live) Stat(ctx context.Context, bucket, key string) (time.Time, error) {
 	mtime, _, err := s3x.Stat(ctx, bucket, key)
+	if errors.Is(err, s3x.ErrNotFound) {
+		return time.Time{}, ErrMissing
+	}
 	return mtime, err
 }
 
@@ -46,7 +49,7 @@ func (live) Keys(ctx context.Context, bucket string) ([]string, error) {
 
 // Hosted runs nebula run list in its own process group, so a timeout
 // also stops the ssh it starts.
-func (live) Hosted(ctx context.Context) (string, error) {
+func (live) Hosted(ctx context.Context) ([]Process, error) {
 	cmd := exec.CommandContext(ctx, "nebula", "run", "list")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
@@ -56,14 +59,32 @@ func (live) Hosted(ctx context.Context) (string, error) {
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return nil, ctx.Err()
 		}
 		if text := strings.TrimSpace(stderr.String()); text != "" {
-			return "", errors.New("nebula run list: " + text)
+			return nil, errors.New("nebula run list: " + text)
 		}
-		return "", fmt.Errorf("nebula run list: %w", err)
+		return nil, fmt.Errorf("nebula run list: %w", err)
 	}
-	return stdout.String(), nil
+	return parseHosted(stdout.String()), nil
+}
+
+// parseHosted reads the name, hostname, port, and release columns of
+// nebula run list. "no apps" is an empty list.
+func parseHosted(out string) []Process {
+	var processes []Process
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 || strings.TrimSpace(line) == "no apps" {
+			continue
+		}
+		p := Process{Name: fields[0]}
+		if len(fields) >= 4 {
+			p.Host, p.Port, p.Release = fields[1], fields[2], strings.Join(fields[3:], " ")
+		}
+		processes = append(processes, p)
+	}
+	return processes
 }
 
 // parseUnit reads systemctl show output taken with --timestamp=unix.

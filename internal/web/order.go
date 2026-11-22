@@ -10,7 +10,7 @@ import (
 func orderPosts(posts []Post, now time.Time) []Post {
 	var future, past []Post
 	for _, post := range posts {
-		if post.PublishedAt != nil && post.PublishedAt.After(now) {
+		if futurePost(post, now) {
 			future = append(future, post)
 			continue
 		}
@@ -35,17 +35,18 @@ func after(a, b *time.Time) bool {
 	return a.After(*b)
 }
 
+// futurePost is true for an essay still in the queue.
 func futurePost(post Post, now time.Time) bool {
 	return post.PublishedAt != nil && post.PublishedAt.After(now)
 }
 
-func whenLine(post Post, loc *time.Location) string {
+func whenLine(post Post, loc *time.Location, now time.Time) string {
 	if post.PublishedAt == nil {
 		return "unscheduled"
 	}
 	at := post.PublishedAt.In(loc)
 	mark := "out"
-	if post.PublishedAt.After(time.Now()) {
+	if futurePost(post, now) {
 		mark = "queue"
 	}
 	return fmt.Sprintf("%-5s  %s", mark, at.Format("Mon 2 Jan 15:04"))

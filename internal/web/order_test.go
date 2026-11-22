@@ -35,10 +35,27 @@ func TestParseWeekday(t *testing.T) {
 }
 
 func TestLandingFieldRoundTrip(t *testing.T) {
-	home := Home{Hero: "I write essays here, now and then."}
-	setField(&home, "hero", "A shorter line.")
-	setField(&home, "quote.0.quote", "Nice.")
-	if home.Hero != "A shorter line." || home.Quotes[0].Quote != "Nice." {
-		t.Fatalf("%#v", home)
+	landing := Landing{Hero: "I write essays here, now and then."}
+	setField(&landing, "hero", "A shorter line.")
+	setField(&landing, "quote.0.quote", "Nice.")
+	if landing.Hero != "A shorter line." || landing.Quotes[0].Quote != "Nice." {
+		t.Fatalf("%#v", landing)
+	}
+}
+
+func TestAFailedLandingSaveKeepsTheLoadedPage(t *testing.T) {
+	m := model{screen: scrLanding, client: &Client{}, landing: &Landing{Hero: "Loaded.", Quotes: []Quote{{Quote: "Old."}}}}
+	m.mode, m.kind, m.editKey, m.draft = modePrompt, "field", "quote.0.quote", "Unsaved."
+	next, cmd := m.submitPrompt()
+	if cmd == nil {
+		t.Fatal("no save")
+	}
+	next, _ = next.(model).Update(failedMsg{"the site returned 500"})
+	landing := next.(model).landing
+	if landing.Hero != "Loaded." || landing.Quotes[0].Quote != "Old." {
+		t.Fatalf("%#v", landing)
+	}
+	if rows := next.(model).rows(); rows[len(rows)-1].key != "cover" {
+		t.Fatalf("rows %v", rows)
 	}
 }

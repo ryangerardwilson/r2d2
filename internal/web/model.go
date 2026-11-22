@@ -1,9 +1,7 @@
 package web
 
 import (
-	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -44,8 +42,7 @@ type model struct {
 	height   int
 	posts    []Post
 	pages    []Page
-	home     Home
-	rows     []row
+	landing  *Landing // the landing page the site last returned; nil until it answers
 	keys     []Key
 	sched    Schedule
 	prompt   string
@@ -60,9 +57,9 @@ type essaysMsg struct {
 	posts []Post
 	sched Schedule
 }
-type homeMsg struct {
-	home   Home
-	status string
+type landingMsg struct {
+	landing Landing
+	status  string
 }
 type pagesMsg struct{ pages []Page }
 type keysMsg struct{ keys []Key }
@@ -91,14 +88,14 @@ func (m model) loadEssays() tea.Cmd {
 	}
 }
 
-func (m model) loadHome() tea.Cmd {
+func (m model) loadLanding() tea.Cmd {
 	client := m.client
 	return func() tea.Msg {
-		home, err := client.GetLanding()
+		landing, err := client.GetLanding()
 		if err != nil {
 			return failedMsg{err.Error()}
 		}
-		return homeMsg{home: home}
+		return landingMsg{landing: landing}
 	}
 }
 
@@ -124,15 +121,14 @@ func (m model) loadKeys() tea.Cmd {
 	}
 }
 
-func (m model) saveHome() tea.Cmd {
+func (m model) saveLanding(landing Landing) tea.Cmd {
 	client := m.client
-	home := m.home
 	return func() tea.Msg {
-		saved, err := client.PutLanding(home)
+		saved, err := client.PutLanding(landing)
 		if err != nil {
 			return failedMsg{err.Error()}
 		}
-		return homeMsg{home: saved, status: "saved"}
+		return landingMsg{landing: saved, status: "saved"}
 	}
 }
 
@@ -164,11 +160,6 @@ func proofOrKeep(client *Client, title, body string) (string, string, error) {
 		return "", "", err
 	}
 	return nextTitle, nextBody, nil
-}
-
-func missingAction(err error) bool {
-	var api *APIError
-	return errors.As(err, &api) && (api.Status == http.StatusNotFound || api.Status == http.StatusMethodNotAllowed)
 }
 
 func (m model) openVim(text string) tea.Cmd {
@@ -208,10 +199,6 @@ func (m *model) finishVim(msg vimDone) (string, bool) {
 	return text, true
 }
 
-func execCommand(name, arg string) *exec.Cmd {
-	return exec.Command(name, arg)
-}
-
 func (m *model) noteSaved(msg savedMsg) tea.Cmd {
 	m.busy = false
 	m.status = msg.status
@@ -220,7 +207,7 @@ func (m *model) noteSaved(msg savedMsg) tea.Cmd {
 	case scrEssays:
 		return m.loadEssays()
 	case scrLanding:
-		return m.loadHome()
+		return m.loadLanding()
 	case scrPages:
 		return m.loadPages()
 	case scrKeys:
@@ -279,6 +266,14 @@ func stays(slug string) bool {
 
 func menuCount() int { return 4 }
 
+// rows are the fields of the landing page the site last returned.
+func (m model) rows() []row {
+	if m.landing == nil {
+		return nil
+	}
+	return landingRows(*m.landing)
+}
+
 func (m model) listCount() int {
 	switch m.screen {
 	case scrMenu:
@@ -286,7 +281,7 @@ func (m model) listCount() int {
 	case scrEssays:
 		return len(m.posts)
 	case scrLanding:
-		return len(m.rows)
+		return len(m.rows())
 	case scrPages:
 		return len(m.pages)
 	case scrKeys:

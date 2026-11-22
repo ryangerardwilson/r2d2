@@ -13,23 +13,6 @@ import (
 	"golang.org/x/term"
 )
 
-var blurbs = map[string]string{
-	"web":       "ryangerardwilson.com admin panel",
-	"cyclotree": "calls of one function, as a tree you move with hjkl",
-	"l":         "compact gray tree of a directory",
-	"o":         "vim-inspired file navigator",
-	"tunnel":    "Cloudflare Tunnel route editor",
-	"gdrive":    "Drive preset, then browse",
-	"pass":      "1Password vaults, then copy one item",
-	"deport":    "occupied external ports, freed with dd",
-	"xl":        "spreadsheet for a budget workbook",
-	"looptab":   "Looptab jobs, run one now",
-	"slack":     "direct messages, tags, and what to know",
-	"health":    "background jobs and nebula backups",
-	"musica":    "player, cassettes, and downloads",
-	"rec":       "screen recorder and camera",
-}
-
 type model struct {
 	cursor int
 	status string
@@ -73,19 +56,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.help {
 				return m, nil
 			}
-			m.cursor = cycled(m.cursor, 1, len(screen.Names))
+			m.cursor = cycled(m.cursor, 1, len(screen.Screens))
 			return m, nil
 		case "k", "up":
 			if m.help {
 				return m, nil
 			}
-			m.cursor = cycled(m.cursor, -1, len(screen.Names))
+			m.cursor = cycled(m.cursor, -1, len(screen.Screens))
 			return m, nil
 		case "enter":
 			if m.help {
 				return m, nil
 			}
-			cmd := exec.Command(executable(), screen.Names[m.cursor])
+			cmd := exec.Command(executable(), screen.Screens[m.cursor].Name)
 			return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
 				return cameBack{err}
 			})
@@ -118,12 +101,12 @@ func (m model) View() string {
 	}
 	var b strings.Builder
 	b.WriteString("r2d2\n\n")
-	for i, name := range screen.Names {
+	for i, s := range screen.Screens {
 		mark := "  "
 		if i == m.cursor {
 			mark = "> "
 		}
-		fmt.Fprintf(&b, "%s%-12s %s\n", mark, name, blurbs[name])
+		b.WriteString(mark + s.Line() + "\n")
 	}
 	if m.status != "" {
 		fmt.Fprintf(&b, "\n%s", m.status)

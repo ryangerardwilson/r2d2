@@ -161,7 +161,7 @@ func saveSize(name string) error {
 }
 
 func runScreen(client Client, stdout io.Writer) (Result, error) {
-	program := tea.NewProgram(newModel(client.Do), tea.WithAltScreen(), tea.WithInput(os.Stdin), tea.WithOutput(stdout))
+	program := tea.NewProgram(newModel(client.Do, scanVideos, playWithMpv), tea.WithAltScreen(), tea.WithInput(os.Stdin), tea.WithOutput(stdout))
 	final, err := program.Run()
 	if err != nil {
 		return Result{}, err

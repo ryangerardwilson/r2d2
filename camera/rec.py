@@ -187,6 +187,7 @@ def covers_monitor(client: dict, monitor: dict) -> bool:
 
 
 def config_path() -> Path:
+    # r2d2 rec owns this file: it writes --size here. The widget only reads it.
     return Path.home() / ".config" / "rec" / "size"
 
 
@@ -196,12 +197,6 @@ def load_size() -> str:
     except OSError:
         return "small"
     return name if name in SIZES else "small"
-
-
-def save_size(name: str) -> None:
-    path = config_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(name + "\n")
 
 
 def socket_path() -> Path:
@@ -1299,8 +1294,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.help:
         print(HELP, end="")
         return 0
-    if args.size:
-        save_size(args.size)
     size_name = args.size or load_size()
     if args.command == "open":
         command = "raise"

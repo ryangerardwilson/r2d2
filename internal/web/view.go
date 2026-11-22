@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 func (m model) View() string {
@@ -65,7 +66,7 @@ func (m model) writeEssays(b *strings.Builder) {
 		b.WriteString("  no essays\n")
 		return
 	}
-	loc := loadZone(m.sched.Zone)
+	loc, now := loadZone(m.sched.Zone), time.Now()
 	start, end := m.window(len(m.posts))
 	width := m.rowWidth()
 	for i := start; i < end; i++ {
@@ -74,20 +75,21 @@ func (m model) writeEssays(b *strings.Builder) {
 		if i == m.cursor {
 			mark = "> "
 		}
-		line := whenLine(post, loc) + "  " + post.Title
+		line := whenLine(post, loc, now) + "  " + post.Title
 		fmt.Fprintf(b, "%s%s\n", mark, cut(line, width))
 	}
 }
 
 func (m model) writeRows(b *strings.Builder) {
-	if len(m.rows) == 0 {
+	rows := m.rows()
+	if len(rows) == 0 {
 		b.WriteString("  loading\n")
 		return
 	}
-	start, end := m.window(len(m.rows))
+	start, end := m.window(len(rows))
 	width := m.rowWidth()
 	for i := start; i < end; i++ {
-		row := m.rows[i]
+		row := rows[i]
 		mark := "  "
 		if i == m.cursor {
 			mark = "> "

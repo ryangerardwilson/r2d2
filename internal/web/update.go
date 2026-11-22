@@ -2,6 +2,7 @@ package web
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -29,11 +30,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.clamp(len(m.posts))
 		return m, nil
-	case homeMsg:
+	case landingMsg:
 		m.busy = false
-		m.home = msg.home
-		m.rows = landingRows(msg.home)
-		m.clamp(len(m.rows))
+		landing := msg.landing
+		m.landing = &landing
+		m.clamp(len(m.rows()))
 		if msg.status != "" {
 			m.status = msg.status
 		}
@@ -181,7 +182,7 @@ func (m model) openMenu() (tea.Model, tea.Cmd) {
 	case 1:
 		m.screen = scrLanding
 		m.busy = true
-		return m, m.loadHome()
+		return m, m.loadLanding()
 	case 2:
 		m.screen = scrPages
 		m.busy = true
@@ -194,10 +195,11 @@ func (m model) openMenu() (tea.Model, tea.Cmd) {
 }
 
 func (m model) openField() (tea.Model, tea.Cmd) {
-	if len(m.rows) == 0 {
+	rows := m.rows()
+	if len(rows) == 0 {
 		return m, nil
 	}
-	row := m.rows[m.cursor]
+	row := rows[m.cursor]
 	if row.key == "portrait" || row.key == "cover" {
 		m.status = "p sets the portrait, c sets the cover, from a file path"
 		return m, nil
@@ -380,18 +382,16 @@ func (m model) submitPrompt() (tea.Model, tea.Cmd) {
 	m.mode = modeList
 	switch m.kind {
 	case "field":
-		setField(&m.home, m.editKey, value)
 		m.busy = true
 		m.status = ""
-		return m, m.saveHome()
+		return m, m.saveLanding(withField(*m.landing, m.editKey, value))
 	case "slug":
 		if value == "" {
 			m.status = "the slug is empty"
 			return m, nil
 		}
 		m.kind = "page"
-		m.editSlug = ""
-		m.editKey = value
+		m.editSlug = value
 		m.busy = true
 		return m, m.openVim(sheet("Title", ""))
 	case "key":
@@ -476,17 +476,13 @@ func (m model) afterVim(msg vimDone) (tea.Model, tea.Cmd) {
 		return m, m.saveEssay(m.editSlug, title, body)
 	case "page":
 		title, body := readSheet(text)
-		slug := m.editSlug
-		if slug == "" {
-			slug = m.editKey
-		}
 		if title == "" {
 			m.status = "a page needs a title"
 			return m, nil
 		}
 		m.busy = true
 		client := m.client
-		page := Page{Slug: slug, Title: title, Body: body}
+		page := Page{Slug: m.editSlug, Title: title, Body: body}
 		return m, func() tea.Msg {
 			if _, err := client.PutPage(page); err != nil {
 				return failedMsg{err.Error()}
@@ -494,10 +490,9 @@ func (m model) afterVim(msg vimDone) (tea.Model, tea.Cmd) {
 			return savedMsg{"saved"}
 		}
 	case "field":
-		setField(&m.home, m.editKey, oneParagraph(text))
 		m.busy = true
 		m.status = ""
-		return m, m.saveHome()
+		return m, m.saveLanding(withField(*m.landing, m.editKey, oneParagraph(text)))
 	default:
 		return m, nil
 	}
@@ -505,7 +500,7 @@ func (m model) afterVim(msg vimDone) (tea.Model, tea.Cmd) {
 
 func openSite(origin string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := execCommand("xdg-open", origin)
+		cmd := exec.Command("xdg-open", origin)
 		if err := cmd.Start(); err != nil {
 			return failedMsg{"could not open the site"}
 		}

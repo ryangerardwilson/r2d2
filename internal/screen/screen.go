@@ -7,14 +7,41 @@ import (
 	c3poscreen "github.com/ryangerardwilson/c3po/screen"
 )
 
-// Names are the screens r2d2 opens. web, health, musica, and rec are implemented
-// here. The others run in this process through the c3po screen package.
-var Names = []string{"web", "cyclotree", "l", "o", "tunnel", "gdrive", "pass", "deport", "xl", "looptab", "slack", "health", "musica", "rec"}
+// Screen is one screen r2d2 opens and the line the menu and the help show for it.
+type Screen struct {
+	Name  string
+	Blurb string
+}
+
+// Screens are the screens r2d2 opens, in menu order. web, health, musica, and
+// rec are implemented here. The others run in this process through the c3po
+// screen package.
+var Screens = []Screen{
+	{"web", "ryangerardwilson.com admin panel"},
+	{"cyclotree", "calls of one function, as a tree you move with hjkl"},
+	{"l", "compact gray tree of a directory"},
+	{"o", "vim-inspired file navigator"},
+	{"tunnel", "Cloudflare Tunnel route editor"},
+	{"gdrive", "Drive preset, then browse"},
+	{"pass", "1Password vaults, then copy one item"},
+	{"deport", "occupied external ports, freed with dd"},
+	{"xl", "spreadsheet for a budget workbook"},
+	{"looptab", "Looptab jobs, run one now"},
+	{"slack", "direct messages, tags, and what to know"},
+	{"health", "background jobs and nebula backups"},
+	{"musica", "player, cassettes, and downloads"},
+	{"rec", "screen recorder and camera"},
+}
+
+// Line is the screen as the menu and the help list it, after a two-column mark.
+func (s Screen) Line() string {
+	return fmt.Sprintf("%-12s %s", s.Name, s.Blurb)
+}
 
 // Known reports whether name is a screen.
 func Known(name string) bool {
-	for _, screen := range Names {
-		if screen == name {
+	for _, screen := range Screens {
+		if screen.Name == name {
 			return true
 		}
 	}

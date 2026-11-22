@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,8 +22,7 @@ type Post struct {
 	Slug        string     `json:"slug"`
 	Title       string     `json:"title"`
 	Body        string     `json:"body"`
-	PublishedAt *time.Time `json:"published_at"`
-	Minutes     int        `json:"minutes"`
+	PublishedAt *time.Time `json:"published_at"` // nil is an unscheduled draft
 }
 
 type Page struct {
@@ -50,7 +50,7 @@ type Resource struct {
 	Href    string `json:"href"`
 }
 
-type Home struct {
+type Landing struct {
 	BrandFull       string   `json:"brand_full"`
 	BrandShort      string   `json:"brand_short"`
 	MetaTitle       string   `json:"meta_title"`
@@ -78,11 +78,10 @@ type Schedule struct {
 }
 
 type Key struct {
-	ID      int64  `json:"id"`
-	Name    string `json:"name"`
-	Prefix  string `json:"prefix"`
-	Created string `json:"created_at"`
-	Token   string `json:"token,omitempty"`
+	ID     int64  `json:"id"`
+	Name   string `json:"name"`
+	Prefix string `json:"prefix"`
+	Token  string `json:"token,omitempty"`
 }
 
 type APIError struct {
@@ -104,21 +103,21 @@ func (c *Client) client() *http.Client {
 	return &http.Client{Timeout: 100 * time.Second}
 }
 
-func (c *Client) GetLanding() (Home, error) {
-	var home Home
-	err := c.do(http.MethodGet, "/api/v1/landing", nil, &home)
-	return home, err
+func (c *Client) GetLanding() (Landing, error) {
+	var landing Landing
+	err := c.do(http.MethodGet, "/api/v1/landing", nil, &landing)
+	return landing, err
 }
 
-func (c *Client) PutLanding(home Home) (Home, error) {
-	if home.Quotes == nil {
-		home.Quotes = []Quote{}
+func (c *Client) PutLanding(landing Landing) (Landing, error) {
+	if landing.Quotes == nil {
+		landing.Quotes = []Quote{}
 	}
-	if home.Socials == nil {
-		home.Socials = []Social{}
+	if landing.Socials == nil {
+		landing.Socials = []Social{}
 	}
-	var out Home
-	err := c.do(http.MethodPut, "/api/v1/landing", home, &out)
+	var out Landing
+	err := c.do(http.MethodPut, "/api/v1/landing", landing, &out)
 	return out, err
 }
 
@@ -262,6 +261,13 @@ func (c *Client) doRaw(method, path, kind string, body io.Reader, out any) error
 		return fmt.Errorf("the site returned unexpected JSON")
 	}
 	return nil
+}
+
+// missingAction is true when the site has no such route, as an older site
+// answers the proof action.
+func missingAction(err error) bool {
+	var api *APIError
+	return errors.As(err, &api) && (api.Status == http.StatusNotFound || api.Status == http.StatusMethodNotAllowed)
 }
 
 func apiErr(status int, raw []byte) error {
