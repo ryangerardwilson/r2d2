@@ -32,7 +32,7 @@ func TestWebIsAScreenAndNlpIsNot(t *testing.T) {
 }
 
 func TestHealthAndMusicaAreNotSentToC3po(t *testing.T) {
-	for _, name := range []string{"web", "health", "musica", "rec"} {
+	for _, name := range []string{"web", "looptab", "health", "musica", "rec"} {
 		var out, errb bytes.Buffer
 		if code := Launch(name, []string{"help"}, &out, &errb); code != 2 || !bytes.Contains(errb.Bytes(), []byte("unknown screen")) {
 			t.Fatalf("%s %d\n%s", name, code, out.String()+errb.String())

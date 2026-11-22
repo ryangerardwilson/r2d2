@@ -8,6 +8,7 @@ import (
 
 	"github.com/ryangerardwilson/musica/player"
 	"github.com/ryangerardwilson/r2d2/internal/health"
+	"github.com/ryangerardwilson/r2d2/internal/looptab"
 	"github.com/ryangerardwilson/r2d2/internal/menu"
 	"github.com/ryangerardwilson/r2d2/internal/rec"
 	"github.com/ryangerardwilson/r2d2/internal/screen"
@@ -34,6 +35,7 @@ const helpUsage = `r2d2 is the terminal program. c3po is the agent CLI.
   r2d2 deport
   r2d2 xl [file]
   r2d2 looptab
+    run a Looptab job now, or edit the jobs file in vim
   r2d2 slack
   r2d2 health
     whether background jobs and nebula backups are working
@@ -86,6 +88,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	switch name {
 	case "web":
 		return web.Run(rest[1:], stdout, stderr)
+	case "looptab":
+		return looptab.Run(rest[1:], stdout, stderr)
 	case "health":
 		return health.Run(rest[1:], stdout, stderr)
 	case "musica":

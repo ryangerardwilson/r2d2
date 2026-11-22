@@ -86,3 +86,13 @@ func TestRecHelpWithoutATerminal(t *testing.T) {
 		t.Fatalf("code %d\n%s", code, out.String())
 	}
 }
+
+func TestLooptabRunsInR2d2(t *testing.T) {
+	var out, err bytes.Buffer
+	if code := Run([]string{"r2d2", "looptab", "help"}, &out, &err); code != 0 || !strings.Contains(out.String(), "e edits the jobs file in vim") || !strings.Contains(out.String(), "enter runs the selected job now") {
+		t.Fatalf("looptab %d\n%s%s", code, out.String(), err.String())
+	}
+	if !strings.Contains(Help, "run one now or edit the jobs file") || !strings.Contains(Help, "run a Looptab job now, or edit the jobs file in vim") {
+		t.Fatalf("help\n%s", Help)
+	}
+}

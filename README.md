@@ -6,6 +6,8 @@ On a terminal, `r2d2` with no arguments opens that menu. `j` and `k` move, Enter
 
 `r2d2 web` is the admin panel for [ryangerardwilson.com](https://ryangerardwilson.com). The other screens run in this process. There is no `c3po tui` command. A session restores with `r2d2 <screen> --resume <id>`.
 
+`r2d2 looptab` lists the Looptab jobs. Enter runs the selected job once through `looptab now`. `e` opens the jobs file in vim, and when vim exits c3po installs it onto the scheduler and the list reloads. The screen calls the exported c3po looptab functions; `c3po looptab` is the command line and does not open vim.
+
 `r2d2 slack` shows the Slack desk. `h` and `l` switch workspace. The table is direct messages, tags, and what to know. Enter opens the row. `r` marks it read on the desk. Opening a row does not mark it read. `s` syncs the desk from Slack. The screen shows when the desk last synced. The user token is not shown.
 
 `r2d2 health` shows whether the background jobs are working: the long-running user services, each timer and the last run of its oneshot, the backups on nebula s3, and each process `nebula run list` names. A row is `ok`, `waiting`, or `down` with a short reason. It checks on open and on `r`, and only reads. A pipe prints the rows.
