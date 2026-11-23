@@ -36,7 +36,7 @@ func TestEssayListWraps(t *testing.T) {
 		screen: scrEssays,
 		width:  80,
 		height: 24,
-		posts:  []Post{{Title: "First essay"}, {Title: "Second essay"}},
+		site:   site{posts: []Post{{Title: "First essay"}, {Title: "Second essay"}}},
 	}
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
 	got := next.(model)

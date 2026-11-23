@@ -2,12 +2,14 @@ package looptab
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // job is one row from `looptab now`.
@@ -24,13 +26,18 @@ func (j job) label() string {
 	return j.Schedule + "  " + j.Kind + "  " + j.Action
 }
 
-func loadJobs(bin string) ([]job, error) {
-	cmd := exec.Command(bin, "now")
+// loadJobs runs looptab now. ctx ends it; the worker gives ctx its timeout.
+func loadJobs(ctx context.Context, bin string) ([]job, error) {
+	cmd := exec.CommandContext(ctx, bin, "now")
 	cmd.Stdin = bytes.NewReader(nil)
+	cmd.WaitDelay = time.Second
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	jobs, parseErr := parseJobList(stdout.String())
 	if parseErr == nil {
 		return jobs, nil

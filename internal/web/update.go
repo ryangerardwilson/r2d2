@@ -1,7 +1,6 @@
 package web
 
 import (
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -9,6 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// Update never waits on the site. A key changes local state and paints; a write or a remote read goes on the
+// worker (work.go) as an intent the frame already shows.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -18,47 +19,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
-		if m.busy {
-			return m, nil
-		}
 		return m.onKey(msg)
-	case essaysMsg:
-		m.busy = false
-		m.posts = msg.posts
-		if msg.sched.Zone != "" {
-			m.sched = msg.sched
-		}
-		m.clamp(len(m.posts))
+	case doneMsg:
+		return m.finish(msg)
+	case statusMsg:
+		m.status = string(msg)
 		return m, nil
-	case landingMsg:
-		m.busy = false
-		landing := msg.landing
-		m.landing = &landing
-		m.clamp(len(m.rows()))
-		if msg.status != "" {
-			m.status = msg.status
-		}
-		return m, nil
-	case pagesMsg:
-		m.busy = false
-		m.pages = msg.pages
-		m.clamp(len(m.pages))
-		return m, nil
-	case keysMsg:
-		m.busy = false
-		m.keys = msg.keys
-		m.clamp(len(m.keys))
-		return m, nil
-	case schedMsg:
-		m.busy = false
-		m.sched = msg.sched
-		m.status = "schedule saved"
-		return m, nil
-	case savedMsg:
-		return m, m.noteSaved(msg)
-	case failedMsg:
-		m.fail(msg)
-		return m, nil
+	case quitMsg:
+		return m, tea.Quit
 	case vimDone:
 		return m.afterVim(msg)
 	default:
@@ -84,12 +52,7 @@ func (m model) onList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.help = false
 		case "q":
 			m.help = false
-			if m.screen == scrMenu {
-				return m, tea.Quit
-			}
-			m.screen = scrMenu
-			m.cursor = 0
-			m.status = ""
+			return m.back()
 		}
 		return m, nil
 	}
@@ -98,13 +61,7 @@ func (m model) onList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.help = true
 		return m, nil
 	case "q":
-		if m.screen == scrMenu {
-			return m, tea.Quit
-		}
-		m.screen = scrMenu
-		m.cursor = 0
-		m.status = ""
-		return m, nil
+		return m.back()
 	case "j", "down":
 		m.move(1, m.listCount())
 		return m, nil
@@ -139,29 +96,40 @@ func (m model) onList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
+// back leaves a screen for the menu, and leaves r2d2 web from the menu.
+func (m model) back() (tea.Model, tea.Cmd) {
+	if m.screen == scrMenu {
+		return m.leave()
+	}
+	m.screen = scrMenu
+	m.cursor = 0
+	m.status = ""
+	return m, nil
+}
+
 func (m model) open() (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case scrMenu:
 		return m.openMenu()
 	case scrEssays:
-		if len(m.posts) == 0 {
+		posts := m.essays()
+		if len(posts) == 0 {
 			return m, nil
 		}
-		post := m.posts[m.cursor]
+		post := posts[m.cursor]
 		m.kind = "essay"
 		m.editSlug = post.Slug
-		m.busy = true
 		return m, m.openVim(sheet(post.Title, post.Body))
 	case scrLanding:
 		return m.openField()
 	case scrPages:
-		if len(m.pages) == 0 {
+		pages := m.pageList()
+		if len(pages) == 0 {
 			return m, nil
 		}
-		page := m.pages[m.cursor]
+		page := pages[m.cursor]
 		m.kind = "page"
 		m.editSlug = page.Slug
-		m.busy = true
 		return m, m.openVim(sheet(page.Title, page.Body))
 	case scrSchedule:
 		return m.askSchedule()
@@ -174,24 +142,19 @@ func (m model) openMenu() (tea.Model, tea.Cmd) {
 	choice := m.cursor
 	m.cursor = 0
 	m.status = ""
+	var load intent
 	switch choice {
 	case 0:
-		m.screen = scrEssays
-		m.busy = true
-		return m, m.loadEssays()
+		m.screen, load = scrEssays, loadEssays{}
 	case 1:
-		m.screen = scrLanding
-		m.busy = true
-		return m, m.loadLanding()
+		m.screen, load = scrLanding, loadLanding{}
 	case 2:
-		m.screen = scrPages
-		m.busy = true
-		return m, m.loadPages()
+		m.screen, load = scrPages, loadPages{}
 	default:
-		m.screen = scrKeys
-		m.busy = true
-		return m, m.loadKeys()
+		m.screen, load = scrKeys, loadKeys{}
 	}
+	cmd := m.enqueue(load)
+	return m, cmd
 }
 
 func (m model) openField() (tea.Model, tea.Cmd) {
@@ -207,7 +170,6 @@ func (m model) openField() (tea.Model, tea.Cmd) {
 	m.editKey = row.key
 	if row.long {
 		m.kind = "field"
-		m.busy = true
 		return m, m.openVim(row.value + "\n")
 	}
 	m.mode = modePrompt
@@ -222,7 +184,6 @@ func (m model) create() (tea.Model, tea.Cmd) {
 	case scrEssays:
 		m.kind = "essay"
 		m.editSlug = ""
-		m.busy = true
 		return m, m.openVim(sheet("Title", ""))
 	case scrPages:
 		m.mode = modePrompt
@@ -241,35 +202,36 @@ func (m model) create() (tea.Model, tea.Cmd) {
 	}
 }
 
+// askDelete picks the row under the cursor now, so the answer to an earlier job cannot change what y deletes.
 func (m model) askDelete() (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case scrEssays:
-		if len(m.posts) == 0 {
+		posts := m.essays()
+		if len(posts) == 0 {
 			return m, nil
 		}
-		m.mode = modeConfirm
-		m.kind = "essay"
-		m.prompt = "delete " + m.posts[m.cursor].Title + "? y/n"
+		m.mode, m.kind, m.editSlug = modeConfirm, "essay", posts[m.cursor].Slug
+		m.prompt = "delete " + posts[m.cursor].Title + "? y/n"
 		return m, nil
 	case scrPages:
-		if len(m.pages) == 0 {
+		pages := m.pageList()
+		if len(pages) == 0 {
 			return m, nil
 		}
-		if stays(m.pages[m.cursor].Slug) {
+		if stays(pages[m.cursor].Slug) {
 			m.status = "that page stays"
 			return m, nil
 		}
-		m.mode = modeConfirm
-		m.kind = "page"
-		m.prompt = "delete " + m.pages[m.cursor].Slug + "? y/n"
+		m.mode, m.kind, m.editSlug = modeConfirm, "page", pages[m.cursor].Slug
+		m.prompt = "delete " + pages[m.cursor].Slug + "? y/n"
 		return m, nil
 	case scrKeys:
-		if len(m.keys) == 0 {
+		keys := m.keyList()
+		if len(keys) == 0 {
 			return m, nil
 		}
-		m.mode = modeConfirm
-		m.kind = "key"
-		m.prompt = "revoke " + m.keys[m.cursor].Name + "? y/n"
+		m.mode, m.kind, m.editID = modeConfirm, "key", keys[m.cursor].ID
+		m.prompt = "revoke " + keys[m.cursor].Name + "? y/n"
 		return m, nil
 	default:
 		return m, nil
@@ -278,60 +240,49 @@ func (m model) askDelete() (tea.Model, tea.Cmd) {
 
 func (m model) onConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.mode = modeList
+	m.status = ""
 	if msg.String() != "y" {
-		m.status = ""
 		return m, nil
 	}
-	m.busy = true
-	client := m.client
+	var drop intent
 	switch m.kind {
 	case "essay":
-		slug := m.posts[m.cursor].Slug
-		return m, func() tea.Msg {
-			if err := client.DeletePost(slug); err != nil {
-				return failedMsg{err.Error()}
-			}
-			return savedMsg{"deleted"}
-		}
+		drop = dropEssay{slug: m.editSlug}
 	case "page":
-		slug := m.pages[m.cursor].Slug
-		return m, func() tea.Msg {
-			if err := client.DeletePage(slug); err != nil {
-				return failedMsg{err.Error()}
-			}
-			return savedMsg{"deleted"}
-		}
+		drop = dropPage{slug: m.editSlug}
 	case "key":
-		id := m.keys[m.cursor].ID
-		return m, func() tea.Msg {
-			if err := client.DeleteKey(id); err != nil {
-				return failedMsg{err.Error()}
-			}
-			return savedMsg{"revoked"}
-		}
+		drop = dropKey{id: m.editID}
 	default:
-		m.busy = false
 		return m, nil
 	}
+	cmd := m.enqueue(drop)
+	m.clamp(m.listCount())
+	return m, cmd
 }
 
+// shift moves a future essay at once in the view, and the cursor with it, and asks the site to do the same.
 func (m model) shift(way string) (tea.Model, tea.Cmd) {
-	if m.screen != scrEssays || len(m.posts) == 0 {
+	if m.screen != scrEssays {
 		return m, nil
 	}
-	post := m.posts[m.cursor]
-	if !futurePost(post, time.Now()) {
+	posts := m.essays()
+	if len(posts) == 0 {
+		return m, nil
+	}
+	now := time.Now()
+	if !futurePost(posts[m.cursor], now) {
 		m.status = "a published essay stays where it is"
 		return m, nil
 	}
-	m.busy = true
-	client := m.client
-	return m, func() tea.Msg {
-		if err := client.MovePost(post.Slug, way); err != nil {
-			return failedMsg{err.Error()}
-		}
-		return savedMsg{"moved"}
+	to := neighbour(posts, m.cursor, way, now)
+	if to < 0 {
+		m.status = "that essay cannot move that way"
+		return m, nil
 	}
+	m.status = ""
+	cmd := m.enqueue(moveEssay{slug: posts[m.cursor].Slug, way: way})
+	m.cursor = to
+	return m, cmd
 }
 
 func (m model) askPhoto(name string) (tea.Model, tea.Cmd) {
@@ -346,8 +297,9 @@ func (m model) askPhoto(name string) (tea.Model, tea.Cmd) {
 }
 
 func (m model) askSchedule() (tea.Model, tea.Cmd) {
+	sched := m.schedView()
 	labels := []string{"weekday", "time", "zone"}
-	values := []string{weekdayName(m.sched.Weekday), m.sched.Time, m.sched.Zone}
+	values := []string{weekdayName(sched.Weekday), sched.Time, sched.Zone}
 	m.mode = modePrompt
 	m.kind = labels[m.cursor]
 	m.prompt = labels[m.cursor]
@@ -380,11 +332,11 @@ func (m model) onPrompt(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m model) submitPrompt() (tea.Model, tea.Cmd) {
 	value := strings.TrimSpace(m.draft)
 	m.mode = modeList
+	m.status = ""
+	var cmd tea.Cmd
 	switch m.kind {
 	case "field":
-		m.busy = true
-		m.status = ""
-		return m, m.saveLanding(withField(*m.landing, m.editKey, value))
+		cmd = m.enqueue(editField{key: m.editKey, value: value})
 	case "slug":
 		if value == "" {
 			m.status = "the slug is empty"
@@ -392,79 +344,42 @@ func (m model) submitPrompt() (tea.Model, tea.Cmd) {
 		}
 		m.kind = "page"
 		m.editSlug = value
-		m.busy = true
 		return m, m.openVim(sheet("Title", ""))
 	case "key":
 		if value == "" {
 			m.status = "the name is empty"
 			return m, nil
 		}
-		m.busy = true
-		client := m.client
-		return m, func() tea.Msg {
-			key, err := client.CreateKey(value)
-			if err != nil {
-				return failedMsg{err.Error()}
-			}
-			return savedMsg{"new key " + key.Token}
-		}
+		cmd = m.enqueue(newKey{name: value})
 	case "portrait", "cover":
-		return m.upload(m.kind, value)
+		cmd = m.enqueue(setPhoto{name: m.kind, path: value})
 	case "weekday", "time", "zone":
 		return m.saveSchedule(m.kind, value)
-	default:
-		return m, nil
 	}
-}
-
-func (m model) upload(name, path string) (tea.Model, tea.Cmd) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		m.status = "could not read the photo"
-		return m, nil
-	}
-	m.busy = true
-	client := m.client
-	return m, func() tea.Msg {
-		if err := client.PutMedia(name, raw); err != nil {
-			return failedMsg{err.Error()}
-		}
-		return savedMsg{name + " saved"}
-	}
+	return m, cmd
 }
 
 func (m model) saveSchedule(field, value string) (tea.Model, tea.Cmd) {
-	sched := m.sched
-	switch field {
-	case "weekday":
+	in := editSchedule{field: field, value: value}
+	if field == "weekday" {
 		day, ok := parseWeekday(value)
 		if !ok {
 			m.status = "weekday is Sunday through Saturday, or 0 through 6"
 			return m, nil
 		}
-		sched.Weekday = day
-	case "time":
-		sched.Time = value
-	case "zone":
-		sched.Zone = value
+		in.day = day
 	}
-	m.busy = true
-	client := m.client
-	return m, func() tea.Msg {
-		saved, err := client.PutSchedule(sched)
-		if err != nil {
-			return failedMsg{err.Error()}
-		}
-		return schedMsg{saved}
-	}
+	cmd := m.enqueue(in)
+	return m, cmd
 }
 
+// afterVim reads the vim buffer and puts the save on the worker.
 func (m model) afterVim(msg vimDone) (tea.Model, tea.Cmd) {
-	m.busy = false
 	text, ok := m.finishVim(msg)
 	if !ok {
 		return m, nil
 	}
+	var cmd tea.Cmd
 	switch m.kind {
 	case "essay":
 		title, body := readSheet(text)
@@ -472,39 +387,30 @@ func (m model) afterVim(msg vimDone) (tea.Model, tea.Cmd) {
 			m.status = "an essay needs a title and a body"
 			return m, nil
 		}
-		m.busy = true
-		return m, m.saveEssay(m.editSlug, title, body)
+		m.status = ""
+		cmd = m.enqueue(saveEssay{slug: m.editSlug, title: title, body: body})
 	case "page":
 		title, body := readSheet(text)
 		if title == "" {
 			m.status = "a page needs a title"
 			return m, nil
 		}
-		m.busy = true
-		client := m.client
-		page := Page{Slug: m.editSlug, Title: title, Body: body}
-		return m, func() tea.Msg {
-			if _, err := client.PutPage(page); err != nil {
-				return failedMsg{err.Error()}
-			}
-			return savedMsg{"saved"}
-		}
-	case "field":
-		m.busy = true
 		m.status = ""
-		return m, m.saveLanding(withField(*m.landing, m.editKey, oneParagraph(text)))
-	default:
-		return m, nil
+		cmd = m.enqueue(savePage{slug: m.editSlug, title: title, body: body})
+	case "field":
+		m.status = ""
+		cmd = m.enqueue(editField{key: m.editKey, value: oneParagraph(text)})
 	}
+	return m, cmd
 }
 
 func openSite(origin string) tea.Cmd {
 	return func() tea.Msg {
 		cmd := exec.Command("xdg-open", origin)
 		if err := cmd.Start(); err != nil {
-			return failedMsg{"could not open the site"}
+			return statusMsg("could not open the site")
 		}
 		go func() { _ = cmd.Wait() }()
-		return savedMsg{"opened " + origin}
+		return statusMsg("opened " + origin)
 	}
 }

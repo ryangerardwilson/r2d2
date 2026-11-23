@@ -12,7 +12,7 @@ The checks SHALL be:
 - `tunnel.service`, `looptab.service`, and `antibloat-observer.service`: `ok` when active and running, else `down`.
 - `gmail.timer` (1 hour), `gdrive.timer` (1 hour), `c3po-snapshot.timer` (10 minutes), `sqlx-backup.timer` (daily), `tesseract-snapshot.timer` (15 minutes), `rgw-slack-quickshell-plugin.timer` (30 minutes), and `genesys.timer` (daily), each with its service: `ok` when the timer is active, the service's last result is success, and the last trigger is not older than twice the interval. A timer that has never triggered, with a next run scheduled and no failed result, SHALL be `waiting`. Anything else SHALL be `down`.
 - `tesseract-restore.service`: `ok` when its last result is success, `down` when it failed. It need not be running.
-- `s3://backups/c3po.sqlite` (10 minutes), `s3://backups/tesseract.sqlite` (15 minutes), and `s3://backups/rgw_slack_quickshell_plugin.sqlite` (30 minutes): `ok` when the object's mtime is newer than twice the interval, else `down`. The mtime SHALL come from `s3x.Stat`.
+- `s3://backups/c3po.sqlite` (10 minutes), `s3://backups/tesseract.sqlite` (15 minutes), and `s3://backups/rgw_slack_quickshell_plugin.sqlite` (30 minutes): `ok` when the object's mtime is newer than twice the interval, else `down`. The mtime SHALL come from `s3.Stat`.
 - `s3://sqlx-backups`: `ok` when the newest UTC day prefix is within two days, else `down`.
 - `s3://backups/musica.sqlite` and `s3://backups/antibloat.sqlite`: `ok` when present, `down` when missing or when the stat fails. Age alone SHALL NOT make them `down`.
 - `s3://backups/crusade.sqlite`: `ok` when present. A missing object SHALL be `waiting`, because crusade skips the put while its task table is empty. A failed stat SHALL be `down`.

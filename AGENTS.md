@@ -10,7 +10,7 @@ Running `r2d2` on a terminal opens the screen menu. `j` and `k` move, Enter open
 
 Essays and long prose open in vim with `-c Wrap`. The saved text joins wrapped lines back into paragraphs. A blank line is a paragraph break. The first paragraph is the title.
 
-`r2d2 health` reads systemd user units, nebula s3 objects (with `s3x.Stat`, never a download), and `nebula run list`. It never restarts or repairs anything. `r2d2 musica` calls `player.Run` from `github.com/ryangerardwilson/musica/player`. The player source stays in the musica repo.
+`r2d2 health` reads systemd user units, nebula s3 objects (with `s3.Stat`, never a download), `nebula keep status --json`, and `nebula run list`. It never restarts or repairs anything. `r2d2 musica` calls `player.Run` from `github.com/ryangerardwilson/musica/player`. The player source stays in the musica repo.
 
 `r2d2 looptab` is implemented in `internal/looptab`. It lists the jobs `looptab now` prints, and Enter runs the selected job once through `looptab now`. `e` calls `looptab.JobsFile` from c3po, opens that file in vim, then calls `looptab.Install` and reloads the list. With no registered file, c3po creates `~/.config/c3po/looptab/jobs` from its template and registers it as `jobs`. c3po is the only writer of the Looptab scheduler file, which it keeps in `~/.config/c3po/looptab/` beside the jobs files. r2d2 does not hold that path. The `looptab` binary reads it through the `~/.config/looptab` symlink. Missing vim says `vim is not on PATH` and leaves the screen up. Its session goes through `screen.OpenSession` in c3po.
 

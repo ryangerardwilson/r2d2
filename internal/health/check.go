@@ -1,5 +1,5 @@
 // Package health is the r2d2 health screen. It reads units, nebula s3
-// objects, and nebula run, and never changes any of them.
+// objects, nebula keep status, and nebula run, and never changes any of them.
 package health
 
 import (
@@ -47,42 +47,103 @@ type Process struct {
 	Release string
 }
 
+// Copy is how far nebula keep's copy of one database lags behind its file.
+// State is nebula's word: ok, waiting, or failing. DirtySince is the first
+// change the copy does not cover and is zero when it covers every change.
+// Error is the last failed upload.
+type Copy struct {
+	Name       string
+	State      string
+	DirtySince time.Time
+	KeptAt     time.Time
+	Error      string
+}
+
 // Checker reads what the screen shows. It must not change anything.
 type Checker interface {
 	Unit(ctx context.Context, name string) (Unit, error)
 	Stat(ctx context.Context, bucket, key string) (time.Time, error)
-	Keys(ctx context.Context, bucket string) ([]string, error)
+	Kept(ctx context.Context) ([]Copy, error)
 	Hosted(ctx context.Context) ([]Process, error)
 }
 
-// timeout bounds each systemctl, s3, and ssh call. A caller's earlier deadline wins.
+// timeout bounds each systemctl, s3, nebula, and ssh call. A caller's earlier deadline wins.
 const timeout = 5 * time.Second
+
+// keepLag is how long a copy may lag before its row is waiting.
+const keepLag = 15 * time.Minute
 
 var errTimeout = errors.New("timed out")
 
 // ErrMissing is what a Checker's Stat returns when the object does not exist.
 var ErrMissing = errors.New("missing")
 
+// ErrNoKeep is what a Checker's Kept returns when the installed nebula has
+// no keep command.
+var ErrNoKeep = errors.New("keep status is unavailable")
+
 // Check runs every check at once and returns the rows in catalog order,
-// then one row per hosted process.
+// then one row per kept database, then one row per hosted process. A backup
+// object is judged once, after nebula keep has answered, because keep
+// uploads only after a change: an idle database's object grows old while
+// its copy is complete.
 func Check(ctx context.Context, c Checker, now time.Time) []Row {
 	rows := make([]Row, len(catalog))
 	var hosted []Row
+	keep := &keepAnswer{done: make(chan struct{})}
 	var wg sync.WaitGroup
 	for i, item := range catalog {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rows[i] = item.run(ctx, c, now)
+			rows[i] = item.run(ctx, c, now, keep)
 		}()
 	}
-	wg.Add(1)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		keep.copies, keep.err = bounded(ctx, c.Kept)
+		close(keep.done)
+	}()
 	go func() {
 		defer wg.Done()
 		hosted = hostedRows(ctx, c)
 	}()
 	wg.Wait()
-	return append(rows, hosted...)
+	kept := copyRows(keep.copies, keep.err, now)
+	return append(append(rows, kept...), hosted...)
+}
+
+// keepAnswer is nebula keep's one answer for this check, read by every row
+// that needs it once done is closed.
+type keepAnswer struct {
+	done   chan struct{}
+	copies []Copy
+	err    error
+}
+
+// covers reports whether keep's copy of name is current enough to vouch
+// for its object: ok, or lagging less than keepLag.
+func (k *keepAnswer) covers(name string, now time.Time) bool {
+	<-k.done
+	for _, c := range k.copies {
+		if c.Name == name {
+			return current(c, now)
+		}
+	}
+	return false
+}
+
+// current is the one rule for a copy that is not behind: ok, or waiting for
+// less than keepLag.
+func current(c Copy, now time.Time) bool {
+	switch c.State {
+	case "ok":
+		return true
+	case "waiting":
+		return c.DirtySince.IsZero() || now.Sub(c.DirtySince) <= keepLag
+	}
+	return false
 }
 
 // bounded returns when fn does or when the timeout passes, whichever is
@@ -108,7 +169,7 @@ func bounded[T any](ctx context.Context, fn func(context.Context) (T, error)) (T
 	}
 }
 
-func (c check) run(ctx context.Context, checker Checker, now time.Time) Row {
+func (c check) run(ctx context.Context, checker Checker, now time.Time, keep *keepAnswer) Row {
 	switch c.kind {
 	case service:
 		return serviceRow(ctx, checker, c)
@@ -116,10 +177,8 @@ func (c check) run(ctx context.Context, checker Checker, now time.Time) Row {
 		return timerRow(ctx, checker, c, now)
 	case boot:
 		return bootRow(ctx, checker, c)
-	case backupDay:
-		return dayRow(ctx, checker, c, now)
 	default:
-		return objectRow(ctx, checker, c, now)
+		return objectRow(ctx, checker, c, now, keep)
 	}
 }
 
@@ -184,7 +243,7 @@ func bootRow(ctx context.Context, c Checker, item check) Row {
 	return Row{item.name, OK, "last run succeeded"}
 }
 
-func objectRow(ctx context.Context, c Checker, item check, now time.Time) Row {
+func objectRow(ctx context.Context, c Checker, item check, now time.Time, keep *keepAnswer) Row {
 	mtime, err := bounded(ctx, func(ctx context.Context) (time.Time, error) {
 		return c.Stat(ctx, item.bucket, item.key)
 	})
@@ -198,39 +257,58 @@ func objectRow(ctx context.Context, c Checker, item check, now time.Time) Row {
 		return down(item, err)
 	}
 	age := now.Sub(mtime)
-	if item.kind == fresh && age > 2*item.every {
-		return Row{item.title(), Down, "written " + ago(age) + ", every " + span(item.every)}
+	if item.kind != fresh || age <= 2*item.every {
+		return Row{item.title(), OK, "written " + ago(age)}
 	}
-	return Row{item.title(), OK, "written " + ago(age)}
+	if keep.covers(strings.TrimSuffix(item.key, ".sqlite"), now) {
+		return Row{item.title(), OK, "written " + ago(age) + "; keep has every change"}
+	}
+	return Row{item.title(), Down, "written " + ago(age) + ", every " + span(item.every)}
 }
 
-func dayRow(ctx context.Context, c Checker, item check, now time.Time) Row {
-	keys, err := bounded(ctx, func(ctx context.Context) ([]string, error) { return c.Keys(ctx, item.bucket) })
+// copyRows is one row per database nebula keep copies. A nebula without
+// keep is one waiting row, not a failure.
+func copyRows(copies []Copy, err error, now time.Time) []Row {
+	if errors.Is(err, ErrNoKeep) {
+		return []Row{{"nebula keep", Waiting, "keep status is unavailable; this nebula has no keep"}}
+	}
 	if err != nil {
-		return down(item, err)
+		return []Row{{"nebula keep", Down, reason(err)}}
 	}
-	newest, name := newestDay(keys)
-	if newest.IsZero() {
-		return Row{item.title(), Down, "no backup day"}
+	if len(copies) == 0 {
+		return []Row{{"nebula keep", OK, "no databases kept"}}
 	}
-	if now.Sub(newest) > 2*item.every {
-		return Row{item.title(), Down, "newest day " + name + ", every " + span(item.every)}
+	rows := make([]Row, 0, len(copies))
+	for _, item := range copies {
+		rows = append(rows, copyRow(item, now))
 	}
-	return Row{item.title(), OK, "newest day " + name}
+	return rows
 }
 
-// newestDay reads the UTC day prefix of each key, as sql backup names them.
-func newestDay(keys []string) (time.Time, string) {
-	var newest time.Time
-	var name string
-	for _, key := range keys {
-		prefix, _, _ := strings.Cut(key, "/")
-		day, err := time.ParseInLocation("2006-01-02", prefix, time.UTC)
-		if err == nil && day.After(newest) {
-			newest, name = day, prefix
+// copyRow is ok while the copy covers every change or has lagged less than
+// keepLag, waiting after that, and down while its upload fails.
+func copyRow(c Copy, now time.Time) Row {
+	name := "keep " + c.Name
+	switch c.State {
+	case "ok":
+		if c.KeptAt.IsZero() {
+			return Row{name, OK, "up to date"}
 		}
+		return Row{name, OK, "kept " + ago(now.Sub(c.KeptAt))}
+	case "waiting":
+		if c.DirtySince.IsZero() {
+			return Row{name, Waiting, "unkept"}
+		}
+		lag := max(now.Sub(c.DirtySince), 0)
+		if !current(c, now) {
+			return Row{name, Waiting, "unkept for " + span(lag)}
+		}
+		return Row{name, OK, "unkept for " + span(lag)}
+	case "failing":
+		return Row{name, Down, short(orUnknown(c.Error))}
+	default:
+		return Row{name, Down, "keep state is " + orUnknown(c.State)}
 	}
-	return newest, name
 }
 
 func hostedRows(ctx context.Context, c Checker) []Row {
@@ -277,7 +355,12 @@ func reason(err error) string {
 	if errors.Is(err, errTimeout) || errors.Is(err, context.DeadlineExceeded) {
 		return "timed out after " + span(timeout)
 	}
-	text, _, _ := strings.Cut(strings.TrimSpace(err.Error()), "\n")
+	return short(err.Error())
+}
+
+// short is the first line of text, cut to 120 bytes.
+func short(text string) string {
+	text, _, _ = strings.Cut(strings.TrimSpace(text), "\n")
 	if len(text) > 120 {
 		text = text[:120]
 	}

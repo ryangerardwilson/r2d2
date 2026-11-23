@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -29,149 +28,77 @@ const (
 	modeConfirm
 )
 
+// site is the site's last answer for each list. A field is replaced wholesale by the next answer that
+// carries it and is never edited in place; the screen draws it with the pending intents applied.
+type site struct {
+	posts   []Post // the queue first, soonest first, then the essays already out
+	sched   Schedule
+	landing *Landing // nil until the site answers
+	pages   []Page
+	keys    []Key
+}
+
 type model struct {
-	client   *Client
+	client   *Client // nil until the API key is read
 	origin   string
+	readKey  func() (string, error) // reads the admin API key, on the worker
+	site     site
+	work     []job // the worker's queue; work[0] is running when running is true
+	running  bool
+	lastID   int
+	quitting bool
 	screen   screen
 	mode     inputMode
 	cursor   int
 	status   string
-	busy     bool
 	help     bool
 	width    int
 	height   int
-	posts    []Post
-	pages    []Page
-	landing  *Landing // the landing page the site last returned; nil until it answers
-	keys     []Key
-	sched    Schedule
 	prompt   string
 	draft    string
 	kind     string
 	editSlug string
 	editKey  string
+	editID   int64
 }
 
-type failedMsg struct{ err string }
-type essaysMsg struct {
-	posts []Post
-	sched Schedule
-}
-type landingMsg struct {
-	landing Landing
-	status  string
-}
-type pagesMsg struct{ pages []Page }
-type keysMsg struct{ keys []Key }
-type schedMsg struct{ sched Schedule }
-type savedMsg struct{ status string }
+type statusMsg string
 type vimDone struct {
 	err    error
 	path   string
 	before string
 }
 
-func (m model) Init() tea.Cmd { return nil }
-
-func (m model) loadEssays() tea.Cmd {
-	client := m.client
-	return func() tea.Msg {
-		posts, err := client.ListPosts()
-		if err != nil {
-			return failedMsg{err.Error()}
-		}
-		sched, err := client.GetSchedule()
-		if err != nil && !missingAction(err) {
-			return failedMsg{err.Error()}
-		}
-		return essaysMsg{posts: orderPosts(posts, time.Now()), sched: sched}
+// newModel paints at once. With no token it starts the worker on the API key read, so the first frame never
+// waits on op.
+func newModel(origin, token string, read func() (string, error)) model {
+	m := model{origin: origin, readKey: read, width: 80, height: 24}
+	if token = strings.TrimSpace(token); token != "" {
+		m.client = &Client{Origin: origin, Token: token}
+		return m
 	}
+	m.push(readKey{read: read, wait: keyWait})
+	m.running = true
+	return m
 }
 
-func (m model) loadLanding() tea.Cmd {
-	client := m.client
-	return func() tea.Msg {
-		landing, err := client.GetLanding()
-		if err != nil {
-			return failedMsg{err.Error()}
-		}
-		return landingMsg{landing: landing}
+func (m model) Init() tea.Cmd {
+	if !m.running || len(m.work) == 0 {
+		return nil
 	}
-}
-
-func (m model) loadPages() tea.Cmd {
-	client := m.client
-	return func() tea.Msg {
-		pages, err := client.ListPages()
-		if err != nil {
-			return failedMsg{err.Error()}
-		}
-		return pagesMsg{pages}
-	}
-}
-
-func (m model) loadKeys() tea.Cmd {
-	client := m.client
-	return func() tea.Msg {
-		keys, err := client.ListKeys()
-		if err != nil {
-			return failedMsg{err.Error()}
-		}
-		return keysMsg{keys}
-	}
-}
-
-func (m model) saveLanding(landing Landing) tea.Cmd {
-	client := m.client
-	return func() tea.Msg {
-		saved, err := client.PutLanding(landing)
-		if err != nil {
-			return failedMsg{err.Error()}
-		}
-		return landingMsg{landing: saved, status: "saved"}
-	}
-}
-
-func (m model) saveEssay(slug, title, body string) tea.Cmd {
-	client := m.client
-	return func() tea.Msg {
-		title, body, err := proofOrKeep(client, title, body)
-		if err != nil {
-			return failedMsg{err.Error()}
-		}
-		if slug == "" {
-			_, err = client.CreatePost(title, body)
-		} else {
-			_, err = client.PutPost(slug, title, body)
-		}
-		if err != nil {
-			return failedMsg{err.Error()}
-		}
-		return savedMsg{"saved"}
-	}
-}
-
-func proofOrKeep(client *Client, title, body string) (string, string, error) {
-	nextTitle, nextBody, err := client.Proof(title, body)
-	if missingAction(err) {
-		return title, body, nil
-	}
-	if err != nil {
-		return "", "", err
-	}
-	return nextTitle, nextBody, nil
+	return m.command(m.work[0])
 }
 
 func (m model) openVim(text string) tea.Cmd {
 	file, err := os.CreateTemp("", "r2d2-web-*.txt")
 	if err != nil {
-		return func() tea.Msg { return failedMsg{err.Error()} }
+		return func() tea.Msg { return statusMsg(err.Error()) }
 	}
 	path := file.Name()
 	if _, err := file.WriteString(text); err != nil {
 		file.Close()
 		os.Remove(path)
-		return func() tea.Msg { return failedMsg{err.Error()} }
+		return func() tea.Msg { return statusMsg(err.Error()) }
 	}
 	file.Close()
 	cmd := exec.Command("vim", "-c", "Wrap", path)
@@ -197,30 +124,6 @@ func (m *model) finishVim(msg vimDone) (string, bool) {
 		return "", false
 	}
 	return text, true
-}
-
-func (m *model) noteSaved(msg savedMsg) tea.Cmd {
-	m.busy = false
-	m.status = msg.status
-	m.mode = modeList
-	switch m.screen {
-	case scrEssays:
-		return m.loadEssays()
-	case scrLanding:
-		return m.loadLanding()
-	case scrPages:
-		return m.loadPages()
-	case scrKeys:
-		return m.loadKeys()
-	default:
-		return nil
-	}
-}
-
-func (m *model) fail(msg failedMsg) {
-	m.busy = false
-	m.status = msg.err
-	m.mode = modeList
 }
 
 func (m *model) clamp(n int) {
@@ -266,12 +169,13 @@ func stays(slug string) bool {
 
 func menuCount() int { return 4 }
 
-// rows are the fields of the landing page the site last returned.
+// rows are the landing fields the screen draws: the site's last landing page with the pending edits.
 func (m model) rows() []row {
-	if m.landing == nil {
+	landing := m.landingView()
+	if landing == nil {
 		return nil
 	}
-	return landingRows(*m.landing)
+	return landingRows(*landing)
 }
 
 func (m model) listCount() int {
@@ -279,13 +183,13 @@ func (m model) listCount() int {
 	case scrMenu:
 		return menuCount()
 	case scrEssays:
-		return len(m.posts)
+		return len(m.essays())
 	case scrLanding:
 		return len(m.rows())
 	case scrPages:
-		return len(m.pages)
+		return len(m.pageList())
 	case scrKeys:
-		return len(m.keys)
+		return len(m.keyList())
 	case scrSchedule:
 		return 3
 	default:

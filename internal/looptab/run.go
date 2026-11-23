@@ -5,6 +5,7 @@
 package looptab
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -68,7 +69,8 @@ func openScreen(id string, stderr io.Writer) int {
 }
 
 // show runs the job list until the operator quits. The terminal is restored
-// before an error is printed.
+// before an error is printed. Once the list runs, its place writer is the
+// only caller of the session and closes it after the last write.
 func show(id string) error {
 	term, err := openTerminal()
 	if err != nil {
@@ -79,14 +81,13 @@ func show(id string) error {
 	if err != nil {
 		return err
 	}
-	defer sess.Close()
 	bin, lookErr := exec.LookPath("looptab")
 	m := &model{
-		load: func() ([]job, error) {
+		load: func(ctx context.Context) ([]job, error) {
 			if lookErr != nil {
 				return nil, errNotOnPath
 			}
-			return loadJobs(bin)
+			return loadJobs(ctx, bin)
 		},
 		session: sess,
 		run: func(j job) error {
@@ -100,6 +101,9 @@ func show(id string) error {
 				return term.away(func() error { return runVim(vim, path) })
 			},
 		}.edit,
+	}
+	if place, ok := sess.Restored(); ok {
+		m.selected = place.Cursor
 	}
 	return m.loop(term)
 }

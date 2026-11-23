@@ -11,8 +11,9 @@ func (m model) View() string {
 		return m.helpView()
 	}
 	var b strings.Builder
+	sched := m.schedView()
 	fmt.Fprintf(&b, "web  %s\n", m.origin)
-	if line := rule(m.sched); line != "" && (m.screen == scrEssays || m.screen == scrSchedule) {
+	if line := rule(sched); line != "" && (m.screen == scrEssays || m.screen == scrSchedule) {
 		fmt.Fprintf(&b, "%s\n", line)
 	}
 	b.WriteString("\n")
@@ -29,9 +30,9 @@ func (m model) View() string {
 		m.writeKeys(&b)
 	case scrSchedule:
 		m.writeChoices(&b, []string{
-			"weekday  " + weekdayName(m.sched.Weekday),
-			"time     " + m.sched.Time,
-			"zone     " + m.sched.Zone,
+			"weekday  " + weekdayName(sched.Weekday),
+			"time     " + sched.Time,
+			"zone     " + sched.Zone,
 		})
 	}
 	if m.mode == modePrompt {
@@ -43,8 +44,8 @@ func (m model) View() string {
 	if m.status != "" {
 		fmt.Fprintf(&b, "\n%s", m.status)
 	}
-	if m.busy {
-		b.WriteString("\nworking")
+	if line := m.workLine(); line != "" {
+		fmt.Fprintf(&b, "\n%s", line)
 	}
 	b.WriteString("\n")
 	return b.String()
@@ -62,15 +63,16 @@ func (m model) writeChoices(b *strings.Builder, labels []string) {
 }
 
 func (m model) writeEssays(b *strings.Builder) {
-	if len(m.posts) == 0 {
+	posts := m.essays()
+	if len(posts) == 0 {
 		b.WriteString("  no essays\n")
 		return
 	}
-	loc, now := loadZone(m.sched.Zone), time.Now()
-	start, end := m.window(len(m.posts))
+	loc, now := loadZone(m.schedView().Zone), time.Now()
+	start, end := m.window(len(posts))
 	width := m.rowWidth()
 	for i := start; i < end; i++ {
-		post := m.posts[i]
+		post := posts[i]
 		mark := "  "
 		if i == m.cursor {
 			mark = "> "
@@ -103,14 +105,15 @@ func (m model) writeRows(b *strings.Builder) {
 }
 
 func (m model) writePages(b *strings.Builder) {
-	if len(m.pages) == 0 {
+	pages := m.pageList()
+	if len(pages) == 0 {
 		b.WriteString("  no pages\n")
 		return
 	}
-	start, end := m.window(len(m.pages))
+	start, end := m.window(len(pages))
 	width := m.rowWidth()
 	for i := start; i < end; i++ {
-		page := m.pages[i]
+		page := pages[i]
 		mark := "  "
 		if i == m.cursor {
 			mark = "> "
@@ -120,13 +123,14 @@ func (m model) writePages(b *strings.Builder) {
 }
 
 func (m model) writeKeys(b *strings.Builder) {
-	if len(m.keys) == 0 {
+	keys := m.keyList()
+	if len(keys) == 0 {
 		b.WriteString("  no keys\n")
 		return
 	}
-	start, end := m.window(len(m.keys))
+	start, end := m.window(len(keys))
 	for i := start; i < end; i++ {
-		key := m.keys[i]
+		key := keys[i]
 		mark := "  "
 		if i == m.cursor {
 			mark = "> "

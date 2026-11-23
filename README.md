@@ -10,7 +10,7 @@ On a terminal, `r2d2` with no arguments opens that menu. `j` and `k` move, Enter
 
 `r2d2 slack` shows the Slack desk. `h` and `l` switch workspace. The table is direct messages, tags, and what to know. Enter opens the row. `r` marks it read on the desk. Opening a row does not mark it read. `s` syncs the desk from Slack. The screen shows when the desk last synced. The user token is not shown.
 
-`r2d2 health` shows whether the background jobs are working: the long-running user services, each timer and the last run of its oneshot, the backups on nebula s3, and each process `nebula run list` names. A row is `ok`, `waiting`, or `down` with a short reason. It checks on open and on `r`, and only reads. A pipe prints the rows.
+`r2d2 health` shows whether the background jobs are working: the long-running user services, each timer and the last run of its oneshot, the backups on nebula s3, how far each `nebula keep` copy lags, and each process `nebula run list` names. A row is `ok`, `waiting`, or `down` with a short reason. It checks on open and on `r`, and only reads. A pipe prints the rows.
 
 `r2d2 musica` opens the [musica](https://github.com/ryangerardwilson/musica) player through its public `player` package. `r2d2 musica end`, `help`, `play`, `open`, and `config` pass through. Downloads still run as `musica download-worker`, so the musica binary stays installed.
 

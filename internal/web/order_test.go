@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -44,18 +45,34 @@ func TestLandingFieldRoundTrip(t *testing.T) {
 }
 
 func TestAFailedLandingSaveKeepsTheLoadedPage(t *testing.T) {
-	m := model{screen: scrLanding, client: &Client{}, landing: &Landing{Hero: "Loaded.", Quotes: []Quote{{Quote: "Old."}}}}
+	m := model{screen: scrLanding, client: &Client{}, site: site{landing: &Landing{Hero: "Loaded.", Quotes: []Quote{{Quote: "Old."}}}}}
 	m.mode, m.kind, m.editKey, m.draft = modePrompt, "field", "quote.0.quote", "Unsaved."
 	next, cmd := m.submitPrompt()
 	if cmd == nil {
 		t.Fatal("no save")
 	}
-	next, _ = next.(model).Update(failedMsg{"the site returned 500"})
-	landing := next.(model).landing
+	if got := rowValue(next.(model).rows(), "quote.0.quote"); got != "Unsaved." {
+		t.Fatalf("the edit is not shown while it saves: %q", got)
+	}
+	if m.site.landing.Quotes[0].Quote != "Old." {
+		t.Fatal("the edit was written into the cached page")
+	}
+	next, _ = next.(model).Update(doneMsg{id: next.(model).work[0].id, err: errors.New("the site returned 500")})
+	landing := next.(model).site.landing
 	if landing.Hero != "Loaded." || landing.Quotes[0].Quote != "Old." {
 		t.Fatalf("%#v", landing)
 	}
-	if rows := next.(model).rows(); rows[len(rows)-1].key != "cover" {
-		t.Fatalf("rows %v", rows)
+	rows := next.(model).rows()
+	if rowValue(rows, "quote.0.quote") != "Old." || rows[len(rows)-1].key != "cover" || next.(model).status != "the site returned 500" {
+		t.Fatalf("rows %v status %q", rows, next.(model).status)
 	}
+}
+
+func rowValue(rows []row, key string) string {
+	for _, row := range rows {
+		if row.key == key {
+			return row.value
+		}
+	}
+	return ""
 }

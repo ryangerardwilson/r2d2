@@ -1,30 +1,103 @@
 package looptab
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
+// step waits until the newest frame shows want, runs before, then presses key.
+type step struct {
+	want   string
+	key    string
+	before func()
+}
+
+// fakeScreen plays a script of steps. The loop paints on its goroutine and
+// reads keys on another, as on a terminal.
 type fakeScreen struct {
-	keys   []string
-	frames []string
-	width  int
-	height int
+	mu      sync.Mutex
+	frames  []string
+	script  []step
+	painted chan struct{}
+	width   int
+	height  int
+}
+
+func newScreen(width, height int, script ...step) *fakeScreen {
+	return &fakeScreen{width: width, height: height, script: script, painted: make(chan struct{}, 1)}
 }
 
 func (f *fakeScreen) size() (int, int) { return f.width, f.height }
 
-func (f *fakeScreen) paint(frame string) { f.frames = append(f.frames, frame) }
+func (f *fakeScreen) paint(frame string) {
+	f.mu.Lock()
+	f.frames = append(f.frames, frame)
+	f.mu.Unlock()
+	select {
+	case f.painted <- struct{}{}:
+	default:
+	}
+}
 
 func (f *fakeScreen) readKey() (string, error) {
-	if len(f.keys) == 0 {
+	f.mu.Lock()
+	if len(f.script) == 0 {
+		f.mu.Unlock()
 		return "", io.EOF
 	}
-	key := f.keys[0]
-	f.keys = f.keys[1:]
-	return key, nil
+	s := f.script[0]
+	f.script = f.script[1:]
+	f.mu.Unlock()
+	deadline := time.After(2 * time.Second)
+	for !strings.Contains(f.last(), s.want) {
+		select {
+		case <-f.painted:
+		case <-deadline:
+			return "", fmt.Errorf("no frame showed %q before %q; last\n%s", s.want, s.key, f.last())
+		}
+	}
+	if s.before != nil {
+		s.before()
+	}
+	return s.key, nil
+}
+
+func (f *fakeScreen) first() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.frames[0]
+}
+
+func (f *fakeScreen) last() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.frames) == 0 {
+		return ""
+	}
+	return f.frames[len(f.frames)-1]
+}
+
+// showed is the first frame that holds every text, or "".
+func (f *fakeScreen) showed(texts ...string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, frame := range f.frames {
+		all := true
+		for _, text := range texts {
+			all = all && strings.Contains(frame, text)
+		}
+		if all {
+			return frame
+		}
+	}
+	return ""
 }
 
 func twoJobs() []job {
@@ -34,21 +107,22 @@ func twoJobs() []job {
 	}
 }
 
+func listed(rows []job) func(context.Context) ([]job, error) {
+	return func(context.Context) ([]job, error) { return rows, nil }
+}
+
 func TestJKMovesAcrossJobs(t *testing.T) {
-	rows := twoJobs()
-	m := &model{load: func() ([]job, error) { return rows, nil }}
-	screen := &fakeScreen{width: 80, height: 24, keys: []string{"j", "k", "q"}}
+	m := &model{load: listed(twoJobs())}
+	screen := newScreen(80, 24,
+		step{want: "> daily 5am  grok", key: "j"},
+		step{want: "> hourly at 15  command", key: "k"},
+		step{want: "> daily 5am  grok", key: "q"},
+	)
 	if err := m.loop(screen); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(screen.frames[0], "j/k move") || !strings.Contains(screen.frames[0], "> daily 5am  grok") {
-		t.Fatalf("first\n%s", screen.frames[0])
-	}
-	if !strings.Contains(screen.frames[1], "> hourly at 15  command") {
-		t.Fatalf("down\n%s", screen.frames[1])
-	}
-	if !strings.Contains(screen.frames[2], "> daily 5am  grok") {
-		t.Fatalf("up\n%s", screen.frames[2])
+	if first := screen.first(); strings.Contains(first, "j/k move") || !strings.Contains(first, "loading") {
+		t.Fatalf("first\n%s", first)
 	}
 }
 
@@ -72,165 +146,196 @@ func TestJKWrapsTheJobs(t *testing.T) {
 }
 
 func TestEnterRunsTheSelectedIndex(t *testing.T) {
-	rows := twoJobs()
+	var loads atomic.Int32
 	var ran []int
 	m := &model{
-		load: func() ([]job, error) { return rows, nil },
+		load: func(context.Context) ([]job, error) {
+			loads.Add(1)
+			return twoJobs(), nil
+		},
 		run: func(j job) error {
 			ran = append(ran, j.Index)
 			return nil
 		},
 	}
-	screen := &fakeScreen{width: 80, height: 24, keys: []string{"j", "enter", "q"}}
+	screen := newScreen(80, 24,
+		step{want: "> daily 5am", key: "j"},
+		step{want: "> hourly at 15", key: "enter"},
+		step{want: "ran 00abcdef", key: "q"},
+	)
 	if err := m.loop(screen); err != nil {
 		t.Fatal(err)
 	}
 	if len(ran) != 1 || ran[0] != 1 {
 		t.Fatalf("ran %v", ran)
 	}
-	last := screen.frames[len(screen.frames)-1]
-	if !strings.Contains(last, "ran 00abcdef") {
-		t.Fatalf("last\n%s", last)
+	if screen.showed("ran 00abcdef", "loading") == "" {
+		t.Fatal("the reload after the run did not show loading")
 	}
 }
 
 func TestQuestionMarkBlocksTheRun(t *testing.T) {
-	rows := twoJobs()
 	var ran []int
 	m := &model{
-		load: func() ([]job, error) { return rows, nil },
+		load: listed(twoJobs()),
 		run: func(j job) error {
 			ran = append(ran, j.Index)
 			return nil
 		},
 	}
-	screen := &fakeScreen{width: 80, height: 24, keys: []string{"?", "j", "enter", "esc", "q"}}
+	screen := newScreen(80, 24,
+		step{want: "> daily 5am", key: "?"},
+		step{want: "enter  run now", key: "j"},
+		step{want: "enter  run now", key: "enter"},
+		step{want: "enter  run now", key: "esc"},
+		step{want: "> daily 5am", key: "q"},
+	)
 	if err := m.loop(screen); err != nil {
 		t.Fatal(err)
 	}
 	if len(ran) != 0 || m.cursor != 0 {
 		t.Fatalf("cursor %d ran %v", m.cursor, ran)
 	}
-	if strings.Contains(screen.frames[0], "j/k move") || !strings.Contains(screen.frames[1], "enter") || !strings.Contains(screen.frames[1], "quit") {
-		t.Fatalf("frames\n%s\n%s", screen.frames[0], screen.frames[1])
+	if strings.Contains(screen.first(), "j/k move") || screen.showed("enter", "quit") == "" {
+		t.Fatalf("first\n%s", screen.first())
 	}
-	if !strings.Contains(screen.frames[len(screen.frames)-1], "> daily 5am") || strings.Contains(screen.frames[len(screen.frames)-1], "j/k move") {
-		t.Fatalf("restored\n%s", screen.frames[len(screen.frames)-1])
+	if last := screen.last(); !strings.Contains(last, "> daily 5am") || strings.Contains(last, "j/k move") {
+		t.Fatalf("restored\n%s", last)
 	}
 }
 
 func TestEnterOnAnEmptyListDoesNotRun(t *testing.T) {
 	var ran []int
 	m := &model{
-		load: func() ([]job, error) { return nil, nil },
+		load: listed(nil),
 		run: func(j job) error {
 			ran = append(ran, j.Index)
 			return nil
 		},
 	}
-	screen := &fakeScreen{width: 40, height: 20, keys: []string{"enter", "q"}}
+	screen := newScreen(40, 20,
+		step{want: "no jobs", key: "enter"},
+		step{want: "no jobs", key: "q"},
+	)
 	if err := m.loop(screen); err != nil {
 		t.Fatal(err)
 	}
-	if len(ran) != 0 || m.status != "no jobs" || !strings.Contains(screen.frames[1], "no jobs") {
-		t.Fatalf("status %q ran %v\n%s", m.status, ran, screen.frames[1])
+	if len(ran) != 0 || m.status != "no jobs" {
+		t.Fatalf("status %q ran %v", m.status, ran)
 	}
 }
 
 func TestEnterWhenLooptabIsMissingDoesNotRun(t *testing.T) {
 	var ran []int
 	m := &model{
-		load: func() ([]job, error) { return nil, errors.New("looptab is not on PATH") },
+		load: func(context.Context) ([]job, error) { return nil, errors.New("looptab is not on PATH") },
 		run: func(j job) error {
 			ran = append(ran, j.Index)
 			return nil
 		},
 	}
-	screen := &fakeScreen{width: 40, height: 20, keys: []string{"enter", "q"}}
+	screen := newScreen(40, 20,
+		step{want: "looptab is not on PATH", key: "enter"},
+		step{want: "looptab is not on PATH", key: "q"},
+	)
 	if err := m.loop(screen); err != nil {
 		t.Fatal(err)
 	}
-	if len(ran) != 0 || !strings.Contains(screen.frames[0], "looptab is not on PATH") {
-		t.Fatalf("ran %v\n%s", ran, screen.frames[0])
+	if len(ran) != 0 || strings.Contains(screen.last(), "no jobs") {
+		t.Fatalf("ran %v\n%s", ran, screen.last())
 	}
 }
 
 func TestAFailedRunStaysOnTheList(t *testing.T) {
-	rows := twoJobs()
 	m := &model{
-		load: func() ([]job, error) { return rows, nil },
+		load: listed(twoJobs()),
 		run:  func(job) error { return errors.New("exit status 1") },
 	}
-	screen := &fakeScreen{width: 80, height: 24, keys: []string{"enter", "q"}}
+	screen := newScreen(80, 24,
+		step{want: "> daily 5am", key: "enter"},
+		step{want: "abcd1234 failed", key: "q"},
+	)
 	if err := m.loop(screen); err != nil {
 		t.Fatal(err)
 	}
-	last := screen.frames[len(screen.frames)-1]
-	if !strings.Contains(last, "abcd1234 failed") || !strings.Contains(last, "> daily 5am") {
-		t.Fatalf("last\n%s", last)
+	if last := screen.last(); !strings.Contains(last, styleError+"abcd1234 failed") || !strings.Contains(last, "> daily 5am") {
+		t.Fatalf("last\n%q", last)
 	}
 }
 
 func TestEEditsAndReloads(t *testing.T) {
-	loads := 0
+	var loads atomic.Int32
 	edits := 0
 	m := &model{
-		load: func() ([]job, error) {
-			loads++
-			return twoJobs(), nil
+		load: func(context.Context) ([]job, error) {
+			if loads.Add(1) == 1 {
+				return twoJobs(), nil
+			}
+			return append(twoJobs(), job{Index: 2, ID: "feed0001", Schedule: "hourly", Kind: "command", Action: "c3po gmail tidy"}), nil
 		},
 		edit: func() (int, error) {
 			edits++
 			return 1, nil
 		},
 	}
-	screen := &fakeScreen{width: 80, height: 24, keys: []string{"e", "q"}}
+	screen := newScreen(80, 24,
+		step{want: "> daily 5am", key: "e"},
+		step{want: "c3po gmail tidy", key: "q"},
+	)
 	if err := m.loop(screen); err != nil {
 		t.Fatal(err)
 	}
-	if edits != 1 || loads != 2 {
-		t.Fatalf("edits %d loads %d", edits, loads)
+	if edits != 1 || loads.Load() != 2 {
+		t.Fatalf("edits %d loads %d", edits, loads.Load())
 	}
-	if last := screen.frames[len(screen.frames)-1]; !strings.Contains(last, "installed 1 jobs files") {
-		t.Fatalf("last\n%s", last)
+	if !strings.Contains(screen.last(), "installed 1 jobs files") {
+		t.Fatalf("last\n%s", screen.last())
 	}
 }
 
 func TestMissingVimLeavesTheScreenUp(t *testing.T) {
-	loads := 0
+	var loads atomic.Int32
 	m := &model{
-		load: func() ([]job, error) {
-			loads++
+		load: func(context.Context) ([]job, error) {
+			loads.Add(1)
 			return twoJobs(), nil
 		},
 		edit: func() (int, error) { return 0, errNoVim },
 	}
-	screen := &fakeScreen{width: 80, height: 24, keys: []string{"e", "j", "q"}}
+	screen := newScreen(80, 24,
+		step{want: "> daily 5am", key: "e"},
+		step{want: "vim is not on PATH", key: "j"},
+		step{want: "> hourly", key: "q"},
+	)
 	if err := m.loop(screen); err != nil {
 		t.Fatal(err)
 	}
-	if loads != 1 || m.cursor != 1 {
-		t.Fatalf("loads %d cursor %d", loads, m.cursor)
+	if loads.Load() != 1 || m.cursor != 1 {
+		t.Fatalf("loads %d cursor %d", loads.Load(), m.cursor)
 	}
-	if !strings.Contains(screen.frames[1], "vim is not on PATH") || !strings.Contains(screen.frames[1], "> daily 5am") {
-		t.Fatalf("frame\n%s", screen.frames[1])
+	if screen.showed("vim is not on PATH", "> daily 5am") == "" {
+		t.Fatal("no frame showed the vim error over the list")
 	}
 }
 
 func TestQuestionMarkBlocksTheEdit(t *testing.T) {
 	edits := 0
 	m := &model{
-		load: func() ([]job, error) { return twoJobs(), nil },
+		load: listed(twoJobs()),
 		edit: func() (int, error) {
 			edits++
 			return 1, nil
 		},
 	}
-	screen := &fakeScreen{width: 80, height: 24, keys: []string{"?", "e", "q"}}
+	screen := newScreen(80, 24,
+		step{want: "> daily 5am", key: "?"},
+		step{want: "e      edit jobs file", key: "e"},
+		step{want: "e      edit jobs file", key: "q"},
+	)
 	if err := m.loop(screen); err != nil {
 		t.Fatal(err)
 	}
-	if edits != 0 || !strings.Contains(screen.frames[1], "e      edit jobs file") || strings.Contains(screen.frames[0], "edit jobs file") {
-		t.Fatalf("edits %d\n%s\n%s", edits, screen.frames[0], screen.frames[1])
+	if edits != 0 || strings.Contains(screen.first(), "edit jobs file") {
+		t.Fatalf("edits %d\n%s", edits, screen.first())
 	}
 }

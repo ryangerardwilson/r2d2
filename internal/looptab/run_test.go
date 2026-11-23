@@ -105,13 +105,17 @@ func TestEditWithNothingRegisteredUsesTheC3poTemplate(t *testing.T) {
 	if err != nil || n != 1 {
 		t.Fatalf("n %d err %v", n, err)
 	}
-	jobs := filepath.Join(home, ".config", "c3po", "looptab", "jobs")
-	if _, err := os.Stat(jobs); err != nil {
+	// c3po owns the jobs file and the scheduler file; the screen sees them
+	// only through c3po's exported functions (statute 3.5).
+	jobs, err := c3polooptab.JobsFile()
+	if err != nil {
 		t.Fatal(err)
 	}
-	sched, err := os.ReadFile(filepath.Join(home, ".config", "looptab", "looptab"))
-	if err != nil || !strings.Contains(string(sched), "hourly c3po gmail tidy") || !strings.Contains(string(sched), "Installed by c3po looptab") {
-		t.Fatalf("schedule %s %v", sched, err)
+	if body, err := os.ReadFile(jobs); err != nil || !strings.Contains(string(body), "hourly c3po gmail tidy") {
+		t.Fatalf("jobs %s %v", body, err)
+	}
+	if again, err := c3polooptab.Install(); err != nil || again != 1 {
+		t.Fatalf("install again %d %v", again, err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".config", "r2d2")); !os.IsNotExist(err) {
 		t.Fatalf("r2d2 config %v", err)

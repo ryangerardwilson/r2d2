@@ -27,8 +27,11 @@ has not fired yet, or a backup that is skipped while its source is empty.
 Units are read with systemctl --user show. A service must be running. A
 timer must be active, its last run must have succeeded, and that run must
 be newer than twice its interval. Backups on nebula s3 are checked with a
-stat of the object, never a download. nebula run list names each hosted
-process. Each s3 and ssh check gives up after 5 seconds and is down.
+stat of the object, never a download. nebula keep status names each
+database it copies: ok, waiting once its copy has lagged 15 minutes, and
+down while the upload fails. A nebula without keep is one row that says
+so. nebula run list names each hosted process. Each s3, nebula, and ssh
+check gives up after 5 seconds and is down.
 
 The screen only reads. It never restarts, stops, or repairs anything.
 It checks when it opens and again on r. On a pipe it prints the rows

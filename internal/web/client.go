@@ -84,6 +84,43 @@ type Key struct {
 	Token  string `json:"token,omitempty"`
 }
 
+// Rename is an essay a write renamed. A future essay's slug carries its publish date, so a write that moves
+// essays renames them.
+type Rename struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// QueueAnswer is the site's answer to an essay write: the essay it wrote, when there is one, and the queue,
+// the weekly slot, and the renames the write left. Posts is nil when an older site answered without them.
+type QueueAnswer struct {
+	Post
+	Posts    []Post    `json:"posts"`
+	Schedule *Schedule `json:"schedule"`
+	Renamed  []Rename  `json:"renamed"`
+}
+
+// ScheduleAnswer is the weekly slot the site saved, and the queue it laid out on it.
+type ScheduleAnswer struct {
+	Schedule
+	Posts   []Post   `json:"posts"`
+	Renamed []Rename `json:"renamed"`
+}
+
+// PageAnswer is the page a write saved, when there is one, and every page after the write. Pages is nil when
+// the site answered without them.
+type PageAnswer struct {
+	Page
+	Pages []Page `json:"pages"`
+}
+
+// KeyAnswer is the key a write created, with its token, and every key after the write. Keys is nil when the
+// site answered without them.
+type KeyAnswer struct {
+	Key
+	Keys []Key `json:"keys"`
+}
+
 type APIError struct {
 	Status int
 	Detail string
@@ -130,24 +167,28 @@ func (c *Client) ListPosts() ([]Post, error) {
 	return posts, err
 }
 
-func (c *Client) CreatePost(title, body string) (Post, error) {
-	var post Post
-	err := c.do(http.MethodPost, "/api/v1/posts", map[string]string{"title": title, "body": body}, &post)
-	return post, err
+func (c *Client) CreatePost(title, body string) (QueueAnswer, error) {
+	var out QueueAnswer
+	err := c.do(http.MethodPost, "/api/v1/posts", map[string]string{"title": title, "body": body}, &out)
+	return out, err
 }
 
-func (c *Client) PutPost(slug, title, body string) (Post, error) {
-	var post Post
-	err := c.do(http.MethodPut, "/api/v1/posts/"+slug, map[string]string{"title": title, "body": body}, &post)
-	return post, err
+func (c *Client) PutPost(slug, title, body string) (QueueAnswer, error) {
+	var out QueueAnswer
+	err := c.do(http.MethodPut, "/api/v1/posts/"+slug, map[string]string{"title": title, "body": body}, &out)
+	return out, err
 }
 
-func (c *Client) DeletePost(slug string) error {
-	return c.do(http.MethodDelete, "/api/v1/posts/"+slug, nil, nil)
+func (c *Client) DeletePost(slug string) (QueueAnswer, error) {
+	var out QueueAnswer
+	err := c.do(http.MethodDelete, "/api/v1/posts/"+slug, nil, &out)
+	return out, err
 }
 
-func (c *Client) MovePost(slug, way string) error {
-	return c.do(http.MethodPost, "/api/v1/posts/"+slug+"/"+way, map[string]string{}, nil)
+func (c *Client) MovePost(slug, way string) (QueueAnswer, error) {
+	var out QueueAnswer
+	err := c.do(http.MethodPost, "/api/v1/posts/"+slug+"/"+way, map[string]string{}, &out)
+	return out, err
 }
 
 func (c *Client) Proof(title, body string) (string, string, error) {
@@ -168,14 +209,16 @@ func (c *Client) ListPages() ([]Page, error) {
 	return pages, err
 }
 
-func (c *Client) PutPage(page Page) (Page, error) {
-	var out Page
+func (c *Client) PutPage(page Page) (PageAnswer, error) {
+	var out PageAnswer
 	err := c.do(http.MethodPut, "/api/v1/pages/"+page.Slug, page, &out)
 	return out, err
 }
 
-func (c *Client) DeletePage(slug string) error {
-	return c.do(http.MethodDelete, "/api/v1/pages/"+slug, nil, nil)
+func (c *Client) DeletePage(slug string) (PageAnswer, error) {
+	var out PageAnswer
+	err := c.do(http.MethodDelete, "/api/v1/pages/"+slug, nil, &out)
+	return out, err
 }
 
 func (c *Client) GetSchedule() (Schedule, error) {
@@ -184,14 +227,17 @@ func (c *Client) GetSchedule() (Schedule, error) {
 	return sched, err
 }
 
-func (c *Client) PutSchedule(sched Schedule) (Schedule, error) {
-	var out Schedule
+func (c *Client) PutSchedule(sched Schedule) (ScheduleAnswer, error) {
+	var out ScheduleAnswer
 	err := c.do(http.MethodPut, "/api/v1/schedule", sched, &out)
 	return out, err
 }
 
-func (c *Client) PutMedia(name string, raw []byte) error {
-	return c.doRaw(http.MethodPut, "/api/v1/media/"+name, "application/octet-stream", bytes.NewReader(raw), nil)
+// PutMedia answers the landing page the photo was saved into, or nil when the site answered without it.
+func (c *Client) PutMedia(name string, raw []byte) (*Landing, error) {
+	var out *Landing
+	err := c.doRaw(http.MethodPut, "/api/v1/media/"+name, "application/octet-stream", bytes.NewReader(raw), &out)
+	return out, err
 }
 
 func (c *Client) ListKeys() ([]Key, error) {
@@ -203,14 +249,16 @@ func (c *Client) ListKeys() ([]Key, error) {
 	return keys, err
 }
 
-func (c *Client) CreateKey(name string) (Key, error) {
-	var key Key
-	err := c.do(http.MethodPost, "/api/v1/keys", map[string]string{"name": name}, &key)
-	return key, err
+func (c *Client) CreateKey(name string) (KeyAnswer, error) {
+	var out KeyAnswer
+	err := c.do(http.MethodPost, "/api/v1/keys", map[string]string{"name": name}, &out)
+	return out, err
 }
 
-func (c *Client) DeleteKey(id int64) error {
-	return c.do(http.MethodDelete, fmt.Sprintf("/api/v1/keys/%d", id), nil, nil)
+func (c *Client) DeleteKey(id int64) (KeyAnswer, error) {
+	var out KeyAnswer
+	err := c.do(http.MethodDelete, fmt.Sprintf("/api/v1/keys/%d", id), nil, &out)
+	return out, err
 }
 
 func (c *Client) do(method, path string, in any, out any) error {

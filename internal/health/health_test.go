@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,13 +18,15 @@ import (
 var now = time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
 
 type fake struct {
-	units   map[string]Unit
-	objects map[string]time.Time
-	keys    map[string][]string
-	hang    map[string]bool
-	hosted  string
-	failRun error
-	calls   atomic.Int32
+	units    map[string]Unit
+	objects  map[string]time.Time
+	hang     map[string]bool
+	kept     []Copy
+	failKeep error
+	hangKeep bool
+	hosted   string
+	failRun  error
+	calls    atomic.Int32
 }
 
 func (f *fake) Unit(_ context.Context, name string) (Unit, error) {
@@ -45,11 +49,12 @@ func (f *fake) Stat(ctx context.Context, bucket, key string) (time.Time, error) 
 	return time.Time{}, fmt.Errorf("s3://%s/%s: %w", bucket, key, ErrMissing)
 }
 
-func (f *fake) Keys(_ context.Context, bucket string) ([]string, error) {
-	if keys, ok := f.keys[bucket]; ok {
-		return keys, nil
+func (f *fake) Kept(ctx context.Context) ([]Copy, error) {
+	if f.hangKeep {
+		<-ctx.Done()
+		return nil, ctx.Err()
 	}
-	return nil, fmt.Errorf("bucket %s: %w", bucket, ErrMissing)
+	return f.kept, f.failKeep
 }
 
 func (f *fake) Hosted(context.Context) ([]Process, error) {
@@ -71,7 +76,7 @@ func succeeded() Unit {
 
 // healthy is every catalog check passing.
 func healthy() *fake {
-	f := &fake{units: map[string]Unit{}, objects: map[string]time.Time{}, keys: map[string][]string{}}
+	f := &fake{units: map[string]Unit{}, objects: map[string]time.Time{}}
 	for _, item := range catalog {
 		switch item.kind {
 		case service:
@@ -81,12 +86,11 @@ func healthy() *fake {
 			f.units[item.unit] = succeeded()
 		case boot:
 			f.units[item.name] = succeeded()
-		case backupDay:
-			f.keys[item.bucket] = []string{"2026-11-18/c3po.sqlite", "2026-11-19/c3po.sqlite"}
 		default:
 			f.objects[item.bucket+"/"+item.key] = now.Add(-time.Minute)
 		}
 	}
+	f.kept = []Copy{{Name: "c3po", State: "ok", KeptAt: now.Add(-3 * time.Minute)}}
 	f.hosted = "site             site.example.com                          8080  r42\n"
 	return f
 }
@@ -104,7 +108,7 @@ func rowNamed(t *testing.T, rows []Row, name string) Row {
 
 func TestEveryCheckIsOkWhenHealthy(t *testing.T) {
 	rows := Check(context.Background(), healthy(), now)
-	if len(rows) != len(catalog)+1 {
+	if len(rows) != len(catalog)+2 {
 		t.Fatalf("%d rows", len(rows))
 	}
 	for _, row := range rows {
@@ -115,13 +119,98 @@ func TestEveryCheckIsOkWhenHealthy(t *testing.T) {
 	if got := rowNamed(t, rows, "run site"); !strings.Contains(got.Reason, "site.example.com port 8080, release r42") {
 		t.Fatalf("%+v", got)
 	}
+	if got := rowNamed(t, rows, "keep c3po"); got.Reason != "kept 3m ago" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+// sqlx-backup.timer and s3://sqlx-backups were retired. The daily dump is
+// nebula-sql-backup.timer and stays on the host.
+func TestTheRetiredBackupRowsAreGone(t *testing.T) {
+	rows := Check(context.Background(), healthy(), now)
+	for _, row := range rows {
+		if strings.Contains(row.Name, "sqlx-backup") {
+			t.Fatalf("retired row %+v", row)
+		}
+	}
+	if got := rowNamed(t, rows, "nebula-sql-backup.timer"); got.State != OK {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestKeepRows(t *testing.T) {
+	f := healthy()
+	f.kept = []Copy{
+		{Name: "c3po", State: "ok", KeptAt: now.Add(-3 * time.Minute)},
+		{Name: "crusade", State: "ok"},
+		{Name: "musica", State: "waiting", DirtySince: now.Add(-2 * time.Minute)},
+		{Name: "tesseract", State: "waiting", DirtySince: now.Add(-20 * time.Minute)},
+		{Name: "antibloat", State: "failing", DirtySince: now.Add(-time.Hour), Error: "put s3://backups/antibloat.sqlite: ssh: connect to host del-vc2 port 22: Connection refused\nmore"},
+		{Name: "odd", State: "stuck"},
+	}
+	rows := Check(context.Background(), f, now)
+	want := map[string]Row{
+		"keep c3po":      {"keep c3po", OK, "kept 3m ago"},
+		"keep crusade":   {"keep crusade", OK, "up to date"},
+		"keep musica":    {"keep musica", OK, "unkept for 2m"},
+		"keep tesseract": {"keep tesseract", Waiting, "unkept for 20m"},
+		"keep antibloat": {"keep antibloat", Down, "put s3://backups/antibloat.sqlite: ssh: connect to host del-vc2 port 22: Connection refused"},
+		"keep odd":       {"keep odd", Down, "keep state is stuck"},
+	}
+	for name, row := range want {
+		if got := rowNamed(t, rows, name); got != row {
+			t.Fatalf("%+v, want %+v", got, row)
+		}
+	}
+	if got := Plain(rows); !strings.Contains(got, "health  2 down") {
+		t.Fatalf("%s", got)
+	}
+}
+
+func TestKeepWithoutDatabasesIsOneOkRow(t *testing.T) {
+	f := healthy()
+	f.kept = nil
+	if got := rowNamed(t, Check(context.Background(), f, now), "nebula keep"); got.State != OK || got.Reason != "no databases kept" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+// An installed nebula that predates keep does not make the screen fail.
+func TestKeepUnavailableIsOneWaitingRow(t *testing.T) {
+	f := healthy()
+	f.failKeep = ErrNoKeep
+	rows := Check(context.Background(), f, now)
+	if len(rows) != len(catalog)+2 {
+		t.Fatalf("%d rows", len(rows))
+	}
+	if got := rowNamed(t, rows, "nebula keep"); got.State != Waiting || !strings.Contains(got.Reason, "keep status is unavailable") {
+		t.Fatalf("%+v", got)
+	}
+	if downCount(rows) != 0 {
+		t.Fatalf("%s", Plain(rows))
+	}
+}
+
+func TestKeepFailureIsDown(t *testing.T) {
+	f := healthy()
+	f.failKeep = errors.New("nebula keep status --json: keep record c3po: unexpected end of JSON input")
+	if got := rowNamed(t, Check(context.Background(), f, now), "nebula keep"); got.State != Down || !strings.Contains(got.Reason, "keep record c3po") {
+		t.Fatalf("%+v", got)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	f = healthy()
+	f.hangKeep = true
+	if got := rowNamed(t, Check(ctx, f, now), "nebula keep"); got.State != Down || !strings.Contains(got.Reason, "timed out") {
+		t.Fatalf("%+v", got)
+	}
 }
 
 func TestUnits(t *testing.T) {
 	f := healthy()
 	f.units["looptab.service"] = Unit{Load: "loaded", Active: "inactive", Sub: "dead", Result: "success"}
 	f.units["gdrive.timer"] = fired(3 * time.Hour)
-	f.units["c3po-snapshot.timer"] = Unit{Load: "loaded", Active: "active", Sub: "waiting", Result: "success", Scheduled: true}
+	f.units["nebula-keep.timer"] = Unit{Load: "loaded", Active: "active", Sub: "waiting", Result: "success", Scheduled: true}
 	f.units["genesys.service"] = Unit{Load: "loaded", Active: "failed", Sub: "failed", Result: "exit-code", Status: "1"}
 	f.units["tesseract-restore.service"] = Unit{Load: "loaded", Active: "failed", Sub: "failed", Result: "exit-code", Status: "2"}
 	delete(f.units, "antibloat-observer.service")
@@ -132,7 +221,7 @@ func TestUnits(t *testing.T) {
 		"antibloat-observer.service": Down,
 		"gmail.timer":                OK,
 		"gdrive.timer":               Down,
-		"c3po-snapshot.timer":        Waiting,
+		"nebula-keep.timer":          Waiting,
 		"genesys.timer":              Down,
 		"tesseract-restore.service":  Down,
 	}
@@ -163,7 +252,6 @@ func TestObjects(t *testing.T) {
 	f.objects["backups/musica.sqlite"] = now.Add(-30 * day)
 	delete(f.objects, "backups/antibloat.sqlite")
 	delete(f.objects, "backups/crusade.sqlite")
-	f.keys["sqlx-backups"] = []string{"2026-11-10/c3po.sqlite", "notes.txt"}
 	rows := Check(context.Background(), f, now)
 	want := map[string]State{
 		"s3://backups/c3po.sqlite":      OK,
@@ -171,7 +259,6 @@ func TestObjects(t *testing.T) {
 		"s3://backups/musica.sqlite":    OK,
 		"s3://backups/antibloat.sqlite": Down,
 		"s3://backups/crusade.sqlite":   Waiting,
-		"s3://sqlx-backups":             Down,
 	}
 	for name, state := range want {
 		if got := rowNamed(t, rows, name); got.State != state {
@@ -351,5 +438,114 @@ func TestPaintIsBoldAndDimOnly(t *testing.T) {
 		if strings.Contains(view, code) {
 			t.Fatalf("color %q in %q", code, view)
 		}
+	}
+}
+
+// lockedBuffer is the program's output, read while the program writes it.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func waitOutput(t *testing.T, out *lockedBuffer, text string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for !strings.Contains(out.String(), text) {
+		if time.Now().After(deadline) {
+			t.Fatalf("no %q in\n%q", text, out.String())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// The first frame and the keys do not wait for the check, which runs in a
+// tea.Cmd.
+func TestTheScreenPaintsBeforeTheCheckReturns(t *testing.T) {
+	release := make(chan struct{})
+	var checks atomic.Int32
+	m := newModel(func() []Row {
+		checks.Add(1)
+		<-release
+		return []Row{{"tunnel.service", OK, "running"}, {"looptab.service", Down, "inactive/dead"}}
+	})
+	in, keys := io.Pipe()
+	defer keys.Close()
+	var out lockedBuffer
+	program := tea.NewProgram(m, tea.WithInput(in), tea.WithOutput(&out))
+	done := make(chan error, 1)
+	go func() {
+		_, err := program.Run()
+		done <- err
+	}()
+	waitOutput(t, &out, "health  checking")
+	if _, err := keys.Write([]byte("?")); err != nil {
+		t.Fatal(err)
+	}
+	waitOutput(t, &out, "r      reload")
+	if checks.Load() != 1 {
+		t.Fatalf("%d checks", checks.Load())
+	}
+	close(release)
+	if _, err := keys.Write([]byte("?")); err != nil {
+		t.Fatal(err)
+	}
+	waitOutput(t, &out, "health  1 down")
+	if _, err := keys.Write([]byte("q")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("q did not quit")
+	}
+}
+
+func TestAnIdleObjectKeepCopiesIsNotDown(t *testing.T) {
+	f := healthy()
+	f.objects["backups/rgw_slack_quickshell_plugin.sqlite"] = now.Add(-6 * time.Hour)
+	f.objects["backups/tesseract.sqlite"] = now.Add(-6 * time.Hour)
+	f.kept = []Copy{
+		{Name: "rgw_slack_quickshell_plugin", State: "ok", KeptAt: now.Add(-6 * time.Hour)},
+		{Name: "tesseract", State: "failing", Error: "connection refused"},
+	}
+	rows := Check(context.Background(), f, now)
+	if got := rowNamed(t, rows, "s3://backups/rgw_slack_quickshell_plugin.sqlite"); got.State != OK || !strings.Contains(got.Reason, "keep has every change") {
+		t.Fatalf("an idle object keep vouches for: %+v", got)
+	}
+	if got := rowNamed(t, rows, "s3://backups/tesseract.sqlite"); got.State != Down {
+		t.Fatalf("a stale object keep cannot vouch for: %+v", got)
+	}
+}
+
+func TestAnObjectKeepIsStillUploadingIsNotDown(t *testing.T) {
+	f := healthy()
+	f.objects["backups/c3po.sqlite"] = now.Add(-3 * time.Hour)
+	f.kept = []Copy{{Name: "c3po", State: "waiting", DirtySince: now.Add(-time.Minute)}}
+	rows := Check(context.Background(), f, now)
+	if got := rowNamed(t, rows, "s3://backups/c3po.sqlite"); got.State != OK {
+		t.Fatalf("an idle object whose copy lags a minute: %+v", got)
+	}
+	if got := rowNamed(t, rows, "keep c3po"); got.State != OK {
+		t.Fatalf("%+v", got)
+	}
+	f.kept = []Copy{{Name: "c3po", State: "waiting", DirtySince: now.Add(-time.Hour)}}
+	rows = Check(context.Background(), f, now)
+	if got := rowNamed(t, rows, "s3://backups/c3po.sqlite"); got.State != Down {
+		t.Fatalf("a copy an hour behind cannot vouch: %+v", got)
 	}
 }

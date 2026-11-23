@@ -1,11 +1,11 @@
 package looptab
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
-
-	c3poscreen "github.com/ryangerardwilson/c3po/screen"
+	"time"
 )
 
 const (
@@ -23,74 +23,152 @@ type screen interface {
 	readKey() (string, error)
 }
 
+// model is the job list. rows is a cache of the last looptab now answer and
+// is replaced whole; the cursor, the status, and selected are local.
 type model struct {
 	rows    []job
+	failed  error // the last answer's error; rows is empty then
+	pending int   // reloads asked of the worker and not answered yet
 	cursor  int
 	status  string
-	err     error
+	alarm   bool // status is an error
 	help    bool
 	width   int
 	height  int
-	load    func() ([]job, error)
-	run     func(job) error
-	edit    func() (int, error)
-	session *c3poscreen.Session
+	// selected is the id of the job under the cursor. It keeps the cursor
+	// on that job across reloads, and the session place follows it. A
+	// resumed screen starts it at the job the session names.
+	selected string
+	load     func(context.Context) ([]job, error)
+	run      func(job) error
+	edit     func() (int, error)
+	session  placer
+	timeout  time.Duration // bound on one looptab now; zero is reloadTimeout
+	saveWait time.Duration // bound on the last place write; zero is placeWait
+	reloads  *reloader
+	places   *placeWriter
 }
 
+type pressed struct {
+	key string
+	err error
+}
+
+// loop paints, then waits for a key or a worker answer. A key is read only
+// after the previous one is handled, so a terminal hand-off on Enter or e
+// never races a read for the terminal.
 func (m *model) loop(term screen) error {
-	m.reload()
+	m.start()
+	defer m.stop(term)
+	keys := make(chan pressed, 1)
+	reading := false
 	for {
+		m.notePlace()
 		m.width, m.height = term.size()
 		term.paint(m.view())
-		key, err := term.readKey()
-		if err != nil {
-			return err
+		if !reading {
+			reading = true
+			go func() {
+				key, err := term.readKey()
+				keys <- pressed{key, err}
+			}()
 		}
-		if m.handleKey(key) {
-			m.noteSession()
-			return nil
+		select {
+		case p := <-keys:
+			reading = false
+			if p.err != nil {
+				return p.err
+			}
+			if m.handleKey(p.key) {
+				return nil
+			}
+		case a := <-m.answers():
+			m.loaded(a)
 		}
-		m.noteSession()
 	}
 }
 
+func (m *model) start() {
+	if m.session != nil {
+		m.places = startPlaceWriter(m.session, m.selected)
+	}
+	if m.load != nil {
+		m.reloads = startReloader(m.load, orDefault(m.timeout, reloadTimeout))
+		m.reload()
+	}
+}
+
+// stop drops a reload in flight and drains the session place. A write still
+// out paints a saving frame and gets saveWait, no more.
+func (m *model) stop(term screen) {
+	if m.reloads != nil {
+		m.reloads.stop()
+	}
+	if m.places == nil {
+		return
+	}
+	m.places.finish()
+	if m.places.wait(0) {
+		return
+	}
+	term.paint(paintStyle(styleTitle, "looptab") + "\n\nsaving place\n")
+	m.places.wait(orDefault(m.saveWait, placeWait))
+}
+
+func (m *model) answers() <-chan answer {
+	if m.reloads == nil {
+		return nil
+	}
+	return m.reloads.answers
+}
+
+// reload asks the worker for the job list. The frame says loading until the
+// answer comes back.
 func (m *model) reload() {
-	if m.load == nil {
+	if m.reloads != nil && m.reloads.ask() {
+		m.pending++
+	}
+}
+
+// loaded replaces the rows with the worker's answer. The cursor stays on the
+// selected job when it is still listed.
+func (m *model) loaded(a answer) {
+	m.pending--
+	if a.err != nil {
+		m.rows, m.cursor, m.failed = nil, 0, a.err
+		m.status, m.alarm = a.err.Error(), true
 		return
 	}
-	rows, err := m.load()
-	if err != nil {
-		m.err = err
-		m.status = err.Error()
-		m.rows = nil
-		m.cursor = 0
-		return
-	}
-	m.rows = rows
-	m.err = nil
+	m.rows, m.failed = a.rows, nil
 	m.cursor = m.clamp()
-	m.restoreSession()
-}
-
-func (m *model) noteSession() {
-	cursor := ""
-	if m.cursor >= 0 && m.cursor < len(m.rows) {
-		cursor = m.rows[m.cursor].ID
+	for i, row := range m.rows {
+		if row.ID == m.selected {
+			m.cursor = i
+		}
 	}
-	_ = m.session.Place("", cursor)
 }
 
-func (m *model) restoreSession() {
-	if m.session == nil {
+// notePlace hands the selected job to the place writer when it changed. The
+// write happens off the loop.
+func (m *model) notePlace() {
+	if len(m.rows) == 0 {
 		return
 	}
-	keys := make([]string, len(m.rows))
-	for i, row := range m.rows {
-		keys[i] = row.ID
+	id := m.rows[m.clamp()].ID
+	if id == m.selected {
+		return
 	}
-	if i, ok := m.session.Index(keys); ok {
-		m.cursor = i
+	m.selected = id
+	if m.places != nil {
+		m.places.note(id)
 	}
+}
+
+func orDefault(d, fallback time.Duration) time.Duration {
+	if d <= 0 {
+		return fallback
+	}
+	return d
 }
 
 func (m *model) handleKey(key string) bool {
@@ -128,10 +206,17 @@ func (m *model) handleKey(key string) bool {
 	return false
 }
 
+// trigger runs the selected job, a terminal hand-off, and then asks the
+// worker for the list. While a reload is out the rows may be stale, so the
+// index is not run.
 func (m *model) trigger() {
+	if m.pending > 0 {
+		m.status, m.alarm = "still loading", false
+		return
+	}
 	if len(m.rows) == 0 {
-		if m.err == nil {
-			m.status = "no jobs"
+		if m.failed == nil {
+			m.status, m.alarm = "no jobs", false
 		}
 		return
 	}
@@ -142,35 +227,30 @@ func (m *model) trigger() {
 	err := m.run(row)
 	m.reload()
 	if err != nil {
-		m.err = err
-		m.status = row.ID + " failed"
+		m.status, m.alarm = row.ID+" failed", true
 		return
 	}
-	m.err = nil
-	m.status = "ran " + row.ID
+	m.status, m.alarm = "ran "+row.ID, false
 }
 
 // editJobs opens the jobs file in vim. After vim exits, c3po has installed
-// the registered files and the list reloads. Missing vim leaves the list up.
+// the registered files and the worker reloads the list. Missing vim leaves
+// the list up.
 func (m *model) editJobs() {
 	if m.edit == nil {
 		return
 	}
 	n, err := m.edit()
 	if errors.Is(err, errNoVim) {
-		m.err = err
-		m.status = err.Error()
+		m.status, m.alarm = err.Error(), true
 		return
 	}
 	m.reload()
 	if err != nil {
-		m.err = err
-		m.status = err.Error()
+		m.status, m.alarm = err.Error(), true
 		return
 	}
-	if m.err == nil {
-		m.status = fmt.Sprintf("installed %d jobs files", n)
-	}
+	m.status, m.alarm = fmt.Sprintf("installed %d jobs files", n), false
 }
 
 func (m *model) clamp() int {
@@ -200,9 +280,13 @@ func (m *model) view() string {
 		return m.helpView()
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\n\n", paintStyle(styleTitle, "looptab"))
+	title := paintStyle(styleTitle, "looptab")
+	if m.pending > 0 {
+		title += "  " + paintStyle(styleMuted, "loading")
+	}
+	fmt.Fprintf(&b, "%s\n\n", title)
 	if len(m.rows) == 0 {
-		if m.err == nil {
+		if m.failed == nil && m.pending == 0 {
 			b.WriteString("no jobs\n")
 		}
 	} else {
@@ -219,7 +303,7 @@ func (m *model) view() string {
 	}
 	if m.status != "" {
 		style := styleMuted
-		if m.err != nil {
+		if m.alarm {
 			style = styleError
 		}
 		fmt.Fprintf(&b, "\n%s\n", paintStyle(style, m.status))

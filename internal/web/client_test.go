@@ -46,7 +46,7 @@ func TestDeleteTreatsNoContentAsSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 	client := &Client{Origin: srv.URL, Token: "rgw_secret"}
-	if err := client.DeletePost("one"); err != nil {
+	if _, err := client.DeletePost("one"); err != nil {
 		t.Fatal(err)
 	}
 }
