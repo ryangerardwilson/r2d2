@@ -39,3 +39,13 @@ func TestHealthAndMusicaAreNotSentToC3po(t *testing.T) {
 		}
 	}
 }
+
+func TestSkillsIsAScreenRunInsideR2d2(t *testing.T) {
+	if !Known("skills") || !Own("skills") {
+		t.Fatal("skills is not an r2d2 screen")
+	}
+	var out, errb bytes.Buffer
+	if code := Launch("skills", []string{"help"}, &out, &errb); code != 2 {
+		t.Fatalf("skills was sent to c3po: %d", code)
+	}
+}

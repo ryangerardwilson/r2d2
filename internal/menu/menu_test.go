@@ -29,11 +29,11 @@ func TestMenuMovesAndWraps(t *testing.T) {
 		t.Fatalf("%s", m.View())
 	}
 	m, _ = m.Update(key("k"))
-	if !strings.Contains(m.View(), "> rec") {
+	if !strings.Contains(m.View(), "> skills") {
 		t.Fatalf("wrap\n%s", m.View())
 	}
 	m, _ = m.Update(key("j"))
-	if !strings.Contains(m.View(), "> web") || strings.Contains(m.View(), "> rec") {
+	if !strings.Contains(m.View(), "> web") || strings.Contains(m.View(), "> skills") {
 		t.Fatalf("back\n%s", m.View())
 	}
 }
@@ -80,4 +80,10 @@ func TestExitStatusKeepsACleanReturn(t *testing.T) {
 
 func key(s string) tea.KeyMsg {
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+}
+
+func TestMenuListsSkills(t *testing.T) {
+	if text := (model{}).View(); !strings.Contains(text, "skills       shared skills for Claude Code, Grok Build, and Codex") {
+		t.Fatalf("missing skills\n%s", text)
+	}
 }

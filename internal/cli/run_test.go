@@ -96,3 +96,23 @@ func TestLooptabRunsInR2d2(t *testing.T) {
 		t.Fatalf("help\n%s", Help)
 	}
 }
+
+func TestSkillsIsListedAndExplained(t *testing.T) {
+	var out, err bytes.Buffer
+	if code := Run([]string{"r2d2", "help"}, &out, &err); code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	_, after, _ := strings.Cut(out.String(), "screens:\n")
+	if !strings.Contains(after, "skills       shared skills for Claude Code, Grok Build, and Codex") {
+		t.Fatalf("screens\n%s", after)
+	}
+	out.Reset()
+	if code := Run([]string{"r2d2", "skills", "help"}, &out, &err); code != 0 || !strings.Contains(out.String(), "~/.local/share/r2d2/skills") {
+		t.Fatalf("skills help %d\n%s%s", code, out.String(), err.String())
+	}
+	out.Reset()
+	err.Reset()
+	if code := Run([]string{"r2d2", "skils"}, &out, &err); code != 2 || !strings.Contains(err.String(), "unknown screen") {
+		t.Fatalf("unknown screen %d\n%s", code, err.String())
+	}
+}

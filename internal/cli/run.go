@@ -12,6 +12,7 @@ import (
 	"github.com/ryangerardwilson/r2d2/internal/menu"
 	"github.com/ryangerardwilson/r2d2/internal/rec"
 	"github.com/ryangerardwilson/r2d2/internal/screen"
+	"github.com/ryangerardwilson/r2d2/internal/skills"
 	"github.com/ryangerardwilson/r2d2/internal/version"
 	"github.com/ryangerardwilson/r2d2/internal/web"
 )
@@ -43,6 +44,8 @@ const helpUsage = `r2d2 is the terminal program. c3po is the agent CLI.
     the musica player; end, play, open, config, and help pass through
   r2d2 rec [start|pause|resume|stop|focus|quit|status|toggle]
     the camera in the corner of a screen recording, and its controls
+  r2d2 skills
+    create, edit, and delete the shared skills in vim; each change is pushed
   r2d2 version
   r2d2 help
 
@@ -96,6 +99,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return player.Run(rest[1:], os.Stdin, stdout, stderr)
 	case "rec":
 		return rec.Run(rest[1:], stdout, stderr)
+	case "skills":
+		return skills.Run(rest[1:], stdout, stderr)
 	}
 	if !screen.Known(name) {
 		fmt.Fprintf(stderr, "unknown screen %q\n", name)
