@@ -1,5 +1,7 @@
 # AGENTS.md
 
+This tool is part of a harness for 0→1 product engineering with AI agents. Prefer the smallest system that keeps rules visible and recoverable.
+
 r2d2 is the terminal program. The module is `github.com/ryangerardwilson/r2d2`. The command is `r2d2`. c3po is the agent CLI. Agents use c3po and do not run r2d2.
 
 c3po is the foundation and the source of truth for each operation. r2d2 is the TUI above it. An r2d2 screen opens the screen and calls exported c3po functions in process. It does not shell out to `c3po` and does not keep a second copy of a c3po operation. Config for a c3po operation stays under `~/.config/c3po/<app>/` or the sqlx database `c3po`; r2d2 does not grow a config directory for it. c3po does not import r2d2.

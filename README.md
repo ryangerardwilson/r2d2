@@ -39,6 +39,12 @@ r2d2 help
 
 Essays and pages open in vim. Vim runs `:Wrap` when the file loads, so the draft sits near 79 characters per line. A blank line keeps paragraphs apart. What is saved is the paragraph with those wraps removed, so the site renders a flowing paragraph. The title is the first paragraph.
 
+## Operator console
+
+Agents use `c3po`. Operators use `r2d2`.
+
+The same tools (call tree with complexity, tunnels, secrets, scheduled jobs, site admin) appear as terminal screens so a human can review, override, or continue the work without reading agent logs. Live complexity and the call chain stay visible before any change ships.
+
 ## Install
 
 Public source is https://github.com/ryangerardwilson/r2d2.
@@ -62,3 +68,5 @@ GOWORK=off go test ./...
 ```
 
 Do not add this module to a parent `go.work`.
+
+Part of an open-source harness for shipping the smallest inspectable system that agents and operators can run and improve. See also [nebula](https://github.com/ryangerardwilson/nebula), [c3po](https://github.com/ryangerardwilson/c3po), [r2d2](https://github.com/ryangerardwilson/r2d2), [crusade](https://github.com/ryangerardwilson/crusade), [tesseract](https://github.com/ryangerardwilson/tesseract).
