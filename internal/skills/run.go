@@ -33,10 +33,12 @@ deleted; the screen shows an error and does not write.
 
 n asks for a name and opens a new SKILL.md in vim. A name is lowercase
 letters, digits, and hyphens, and does not start or end with a hyphen.
+rn renames the selected skill. The field starts as the current name.
 enter opens the selected SKILL.md in vim. d removes the selected skill
-after y. Each one commits Add, Update, or Remove <name> as Ryan Gerard
-Wilson and pushes main, never with force. A failed push stays on screen
-and keeps the commit. r fetches and fast-forwards main.
+after y. Each one commits Add, Update, Remove, or Rename <name> as Ryan
+Gerard Wilson and pushes main, never with force. A failed push stays on
+screen and keeps the commit. rr fetches and fast-forwards main. r and
+then any other key cancels.
 
 j and k move, g and G jump to the ends, ? shows the shortcuts, and q
 quits. A pipe prints this help.

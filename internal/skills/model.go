@@ -36,21 +36,23 @@ type screen interface {
 
 // model is the skill list over the working copy.
 type model struct {
-	repo     *repo
-	rows     []string
-	cursor   int
-	help     bool
-	note     string // the clone's state
-	broken   error  // set when the directory is not the skills repository
-	writable bool
-	status   string
-	alarm    bool    // status is an error
-	naming   *string // the name typed after n; nil when not asking
-	removing string  // the skill d asked about; empty when not asking
-	width    int
-	height   int
-	lookVim  func() (string, error)
-	openVim  func(vim, path string) error
+	repo       *repo
+	rows       []string
+	cursor     int
+	help       bool
+	note       string // the clone's state
+	broken     error  // set when the directory is not the skills repository
+	writable   bool
+	status     string
+	alarm      bool    // status is an error
+	naming     *string // the name typed after n or rn; nil when not asking
+	renameFrom string  // the skill rn is renaming; empty when creating
+	removing   string  // the skill d asked about; empty when not asking
+	leader     string  // r while waiting for the second key of rn or rr
+	width      int
+	height     int
+	lookVim    func() (string, error)
+	openVim    func(vim, path string) error
 	// busy paints a frame that names the git step running, before it blocks.
 	busy func(text string)
 }
@@ -112,6 +114,8 @@ func (m *model) handleKey(key string) bool {
 		m.typeName(key)
 	case m.removing != "":
 		m.answer(key)
+	case m.leader != "":
+		m.leaderKey(key)
 	case m.help:
 		return m.helpKey(key)
 	default:
@@ -151,10 +155,22 @@ func (m *model) listKey(key string) bool {
 	case "d":
 		m.startRemove()
 	case "r":
-		m.refresh()
+		m.leader, m.status, m.alarm = "r", "", false
 	}
 	m.cursor = m.clamp()
 	return false
+}
+
+// leaderKey takes the key after r. n renames, r refreshes, and any other
+// key cancels.
+func (m *model) leaderKey(key string) {
+	m.leader = ""
+	switch key {
+	case "n":
+		m.startRename()
+	case "r":
+		m.refresh()
+	}
 }
 
 // canWrite is false, with the reason in the status, when no commit may be made.
@@ -183,18 +199,36 @@ func (m *model) startNew() {
 		return
 	}
 	name := ""
-	m.naming, m.status, m.alarm = &name, "", false
+	m.naming, m.renameFrom, m.status, m.alarm = &name, "", "", false
 }
 
-// typeName edits the name after n. Enter checks it, and a rejected name
-// stays in the field with the reason. Esc cancels.
+// startRename asks for a new name of the selected skill. The field starts
+// as the current name.
+func (m *model) startRename() {
+	if !m.canWrite() {
+		return
+	}
+	name, ok := m.selected()
+	if !ok {
+		return
+	}
+	typed := name
+	m.renameFrom, m.naming, m.status, m.alarm = name, &typed, "", false
+}
+
+// typeName edits the name after n or rn. Enter checks it, and a rejected
+// name stays in the field with the reason. Esc cancels.
 func (m *model) typeName(key string) {
 	name := *m.naming
 	switch {
 	case key == "esc" || key == "ctrl+c":
-		m.naming, m.status, m.alarm = nil, "", false
+		m.naming, m.renameFrom, m.status, m.alarm = nil, "", "", false
 	case key == "enter":
-		m.create(name)
+		if m.renameFrom != "" {
+			m.rename(name)
+		} else {
+			m.create(name)
+		}
 	case key == "backspace":
 		if name != "" {
 			name = name[:len(name)-1]
@@ -302,15 +336,42 @@ func (m *model) answer(key string) {
 	m.save(name, "Remove "+name)
 }
 
+// rename moves the selected skill to name. The same name commits nothing.
+// A rejected name stays in the field.
+func (m *model) rename(name string) {
+	from := m.renameFrom
+	if name == from {
+		m.naming, m.renameFrom = nil, ""
+		m.status, m.alarm = "no change to "+from, false
+		return
+	}
+	if err := m.checkName(name); err != nil {
+		m.status, m.alarm = err.Error(), true
+		return
+	}
+	m.naming, m.renameFrom = nil, ""
+	message := "Rename " + from + " to " + name
+	m.commitAndPush(name, message, func(ctx context.Context) error {
+		return m.repo.move(ctx, from, name, message)
+	})
+}
+
 // save commits the skill's paths and pushes main. A failed push keeps the
 // commit and says so.
 func (m *model) save(name, message string) {
+	m.commitAndPush(name, message, func(ctx context.Context) error {
+		return m.repo.commit(ctx, name, message)
+	})
+}
+
+// commitAndPush runs commit, reloads onto stay, and pushes main.
+func (m *model) commitAndPush(stay, message string, commit func(context.Context) error) {
 	ctx := context.Background()
 	m.busy("committing " + message)
-	err := m.repo.commit(ctx, name, message)
-	m.reload(name)
+	err := commit(ctx)
+	m.reload(stay)
 	if errors.Is(err, errNothing) {
-		m.status, m.alarm = "nothing to commit for "+name, false
+		m.status, m.alarm = "nothing to commit for "+stay, false
 		return
 	}
 	if err != nil {
@@ -409,11 +470,13 @@ func (m *model) writeRows(b *strings.Builder) {
 func (m *model) footer() (string, string) {
 	switch {
 	case m.naming != nil:
-		line := "new skill: " + *m.naming
+		line := m.namePrefix() + *m.naming
 		if m.status != "" {
 			line += "  " + m.status
 		}
 		return line, ""
+	case m.leader == "r":
+		return "n rename, r refresh", styleActive
 	case m.removing != "":
 		return "remove " + m.removing + "? y/n", styleActive
 	case m.status == "":
@@ -432,7 +495,7 @@ func (m *model) blockCursor() (row, col int) {
 	}
 	lines := strings.Split(strings.TrimSuffix(m.view(), "\n"), "\n")
 	row = len(lines)
-	col = len("new skill: ") + len(*m.naming) + 1
+	col = len(m.namePrefix()) + len(*m.naming) + 1
 	if m.width > 0 && col > m.width {
 		col = m.width
 	}
@@ -440,6 +503,14 @@ func (m *model) blockCursor() (row, col int) {
 		col = 1
 	}
 	return row, col
+}
+
+// namePrefix is the label in front of the name being typed.
+func (m *model) namePrefix() string {
+	if m.renameFrom != "" {
+		return "rename " + m.renameFrom + ": "
+	}
+	return "new skill: "
 }
 
 func helpView() string {
@@ -450,8 +521,9 @@ func helpView() string {
 		"g/G    first, last",
 		"enter  edit in vim",
 		"n      new skill",
+		"rn     rename skill",
 		"d      remove skill",
-		"r      fetch and fast-forward",
+		"rr     fetch and fast-forward",
 		"?      shortcuts",
 		"q      quit",
 	}

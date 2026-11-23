@@ -351,6 +351,74 @@ func TestRemoveAsksFirst(t *testing.T) {
 	}
 }
 
+func TestRenameMovesTheSkill(t *testing.T) {
+	f := newFixture(t, "alpha")
+	m := f.model("")
+	original, err := os.ReadFile(m.repo.skillFile("alpha"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	press(m, "r", "n")
+	if m.renameFrom != "alpha" || m.naming == nil || *m.naming != "alpha" {
+		t.Fatalf("prompt from %q naming %v", m.renameFrom, m.naming)
+	}
+	if _, col := m.blockCursor(); col != len("rename alpha: alpha")+1 {
+		t.Fatalf("col %d", col)
+	}
+	for i := 0; i < len("alpha"); i++ {
+		press(m, "backspace")
+	}
+	typeKeys(m, "beta")
+	press(m, "enter")
+	if m.alarm || m.naming != nil || m.renameFrom != "" {
+		t.Fatalf("status %q", m.status)
+	}
+	if _, err := os.Stat(m.repo.skillDir("alpha")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("alpha remains")
+	}
+	got, err := os.ReadFile(m.repo.skillFile("beta"))
+	if err != nil || string(got) != string(original) {
+		t.Fatalf("bytes %q err %v", got, err)
+	}
+	if f.subjects()[0] != "Rename alpha to beta" {
+		t.Fatalf("head %q", f.subjects()[0])
+	}
+	if m.rows[m.clamp()] != "beta" {
+		t.Fatalf("cursor %v", m.rows)
+	}
+}
+
+func TestRenameCancelAndUnchangedName(t *testing.T) {
+	f := newFixture(t, "alpha")
+	m := f.model("")
+	before := strings.Join(f.subjects(), ",")
+	press(m, "r", "n", "esc")
+	if m.naming != nil || m.renameFrom != "" || strings.Join(f.subjects(), ",") != before {
+		t.Fatalf("esc status %q subjects %v", m.status, f.subjects())
+	}
+	press(m, "r", "n", "enter")
+	if m.naming != nil || m.status != "no change to alpha" || strings.Join(f.subjects(), ",") != before {
+		t.Fatalf("same name status %q subjects %v", m.status, f.subjects())
+	}
+	press(m, "r", "n")
+	for i := 0; i < len("alpha"); i++ {
+		press(m, "backspace")
+	}
+	typeKeys(m, "Deploy")
+	press(m, "enter")
+	if m.naming == nil || !m.alarm {
+		t.Fatalf("bad name status %q", m.status)
+	}
+	if _, err := os.Stat(m.repo.skillFile("alpha")); err != nil {
+		t.Fatal(err)
+	}
+	empty := newFixture(t).model("")
+	press(empty, "r", "n")
+	if empty.naming != nil || empty.status != "no skills" {
+		t.Fatalf("empty %q", empty.status)
+	}
+}
+
 func TestRefusedPushKeepsTheCommit(t *testing.T) {
 	f := newFixture(t)
 	m := f.model("x")
@@ -373,7 +441,7 @@ func TestRefusedPushKeepsTheCommit(t *testing.T) {
 	if strings.Join(m.rows, ",") != "deploy" {
 		t.Fatalf("rows = %v", m.rows)
 	}
-	press(m, "r")
+	press(m, "r", "r")
 	if m.note != "1 unpushed commit; left as it is" {
 		t.Fatalf("note after r = %q", m.note)
 	}
@@ -394,7 +462,7 @@ func TestDirtyWorktreeIsLeftInPlace(t *testing.T) {
 	if m.note != "dirty worktree; left as it is" {
 		t.Fatalf("note = %q", m.note)
 	}
-	press(m, "r")
+	press(m, "r", "r")
 	if m.note != "dirty worktree; left as it is" || f.git(f.dir, "rev-parse", "HEAD") != head {
 		t.Fatalf("r moved main or lost the note: %q", m.note)
 	}

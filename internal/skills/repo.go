@@ -297,6 +297,17 @@ func (r *repo) commit(ctx context.Context, name, message string) error {
 	return err
 }
 
+// move renames one skill directory and commits that rename.
+func (r *repo) move(ctx context.Context, from, to, message string) error {
+	oldPath := skillRoot + "/" + from
+	newPath := skillRoot + "/" + to
+	if _, err := r.git(ctx, r.dir, "mv", "--", oldPath, newPath); err != nil {
+		return err
+	}
+	_, err := r.git(ctx, r.dir, "commit", "--quiet", "-m", message, "--", oldPath, newPath)
+	return err
+}
+
 // push sends main to origin/main. It never forces.
 func (r *repo) push(ctx context.Context) error {
 	_, err := r.git(ctx, r.dir, "push", "--quiet", "origin", "refs/heads/"+branch+":refs/heads/"+branch)

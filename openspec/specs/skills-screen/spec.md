@@ -40,7 +40,9 @@ Enter SHALL open the selected `SKILL.md` in vim. When the file changed, r2d2 SHA
 
 `d` SHALL ask for a confirmation. `y` SHALL remove the skill directory and commit `Remove <name>`. Any other key SHALL cancel and leave the list as it was.
 
-`r` SHALL fetch and fast-forward `main` when the worktree is clean, HEAD is `main`, and there are no unpushed commits, and SHALL otherwise say why it did not.
+`rn` SHALL ask for a new name of the selected skill. The field SHALL start as the current name, and a steady block cursor SHALL sit immediately after the characters typed so far. The name rules are the same as `n`. Esc SHALL cancel and SHALL NOT move the directory. The same name SHALL NOT commit. A good new name SHALL move the directory, SHALL keep the file bytes as they were, and SHALL commit `Rename <old> to <new>`.
+
+`rr` SHALL fetch and fast-forward `main` when the worktree is clean, HEAD is `main`, and there are no unpushed commits, and SHALL otherwise say why it did not. `r` followed by any other key SHALL cancel.
 
 A missing vim SHALL say `vim is not on PATH`, SHALL NOT write a file, and SHALL leave the screen up. Writes SHALL be off when HEAD is not `main`.
 
@@ -73,6 +75,19 @@ A missing vim SHALL say `vim is not on PATH`, SHALL NOT write a file, and SHALL 
 - **THEN** no commit SHALL be made
 - **WHEN** the operator presses Enter again and saves a change
 - **THEN** a commit `Update deploy` SHALL be pushed to `main`
+
+#### Scenario: A skill is renamed
+
+- **WHEN** the operator presses `r` then `n` on `deploy`, changes the name to `ship`, and presses Enter
+- **THEN** the directory SHALL be `ship`
+- **AND** the file bytes SHALL be unchanged
+- **AND** a commit `Rename deploy to ship` SHALL be pushed to `main`
+
+#### Scenario: Rename cancel keeps the skill
+
+- **WHEN** the operator presses `r`, then `n`, then Esc
+- **THEN** the directory SHALL stay
+- **AND** no commit SHALL be made
 
 #### Scenario: A skill is removed
 
