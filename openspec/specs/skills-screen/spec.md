@@ -34,9 +34,9 @@ r2d2 skills edits the shared skills for Claude Code, Grok Build, and Codex in a 
 
 On a terminal, `r2d2 skills` SHALL list the skills by name. `j` and `k` SHALL move and SHALL wrap. `g` and `G` SHALL jump to the first and last skill. An empty list SHALL leave the cursor in place and SHALL say `no skills`. The screen SHALL NOT write shortcut text until `?`, and a second `?` SHALL hide it. `q` SHALL quit. The screen SHALL paint only in black, white, and gray.
 
-`n` SHALL ask for a name. A name SHALL be lowercase letters, digits, and hyphens, SHALL NOT start or end with a hyphen, and SHALL be at most 64 characters. A bad name or a name that already exists SHALL be rejected with a message, SHALL NOT write a file, and SHALL leave the screen up. A good name SHALL write `plugins/skills/skills/<name>/SKILL.md` with YAML frontmatter that has `name: <name>` and a one-line `description` placeholder, and SHALL open it in vim. When vim exits and the file is not empty, r2d2 SHALL commit `Add <name>`. When the file is empty, r2d2 SHALL remove the new directory and SHALL NOT commit.
+`n` SHALL ask for a name. A name SHALL be lowercase letters, digits, and hyphens, SHALL NOT start or end with a hyphen, and SHALL be at most 64 characters. A bad name or a name that already exists SHALL be rejected with a message, SHALL NOT write a file, and SHALL leave the screen up. A good name SHALL write an empty `plugins/skills/skills/<name>/SKILL.md` and SHALL open it in vim. When vim exits and the file is not empty, r2d2 SHALL commit `Add <name>` with the file exactly as vim left it. r2d2 SHALL NOT insert, require, or rewrite any header or frontmatter. When the file is empty, r2d2 SHALL remove the new directory and SHALL NOT commit.
 
-Enter SHALL open the selected `SKILL.md` in vim. When the file changed, r2d2 SHALL commit `Update <name>`. When it did not change, r2d2 SHALL NOT commit.
+Enter SHALL open the selected `SKILL.md` in vim. When the file changed, r2d2 SHALL commit `Update <name>` with the file exactly as vim left it. When it did not change, r2d2 SHALL NOT commit.
 
 `d` SHALL ask for a confirmation. `y` SHALL remove the skill directory and commit `Remove <name>`. Any other key SHALL cancel and leave the list as it was.
 
@@ -47,7 +47,7 @@ A missing vim SHALL say `vim is not on PATH`, SHALL NOT write a file, and SHALL 
 #### Scenario: A new skill is added
 
 - **WHEN** the operator presses `n`, types `deploy`, presses Enter, and saves the file in vim
-- **THEN** `plugins/skills/skills/deploy/SKILL.md` SHALL start with `name: deploy`
+- **THEN** `plugins/skills/skills/deploy/SKILL.md` SHALL be exactly the text saved in vim
 - **AND** a commit `Add deploy` SHALL be pushed to `main`
 - **AND** the list SHALL show `deploy`
 

@@ -259,8 +259,8 @@ func (r *repo) skillFile(name string) string {
 	return filepath.Join(r.skillDir(name), "SKILL.md")
 }
 
-// scaffold writes the minimal SKILL.md of a new skill. It refuses a name
-// whose directory is already there.
+// scaffold writes an empty SKILL.md for a new skill. The file stays empty
+// until vim saves it. It refuses a name whose directory is already there.
 func (r *repo) scaffold(name string) (string, error) {
 	dir := r.skillDir(name)
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
@@ -273,8 +273,7 @@ func (r *repo) scaffold(name string) (string, error) {
 		return "", err
 	}
 	path := r.skillFile(name)
-	body := "---\nname: " + name + "\ndescription: Say what " + name + " does and when to use it.\n---\n"
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
 		return "", err
 	}
 	return path, nil

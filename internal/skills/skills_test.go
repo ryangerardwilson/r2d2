@@ -211,9 +211,12 @@ func TestCreateCommitsAndPushes(t *testing.T) {
 	if got := f.subjects()[0]; got != "Add deploy" {
 		t.Fatalf("remote head = %q", got)
 	}
-	body := f.git(f.remote, "show", "main:"+skillRoot+"/deploy/SKILL.md")
-	if !strings.HasPrefix(body, "---\nname: deploy\ndescription: ") || !strings.Contains(body, "Use it to deploy.") {
-		t.Fatalf("SKILL.md = %q", body)
+	saved, err := os.ReadFile(filepath.Join(f.dir, skillRoot, "deploy", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(saved) != "\nUse it to deploy.\n" {
+		t.Fatalf("SKILL.md = %q", saved)
 	}
 	author := f.git(f.remote, "log", "-1", "--format=%an <%ae>|%cn <%ce>", "main")
 	want := authorName + " <" + authorMail + ">"

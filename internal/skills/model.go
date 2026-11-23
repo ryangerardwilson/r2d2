@@ -220,8 +220,8 @@ func (m *model) checkName(name string) error {
 	return nil
 }
 
-// create writes a minimal SKILL.md, opens it in vim, and commits it unless
-// it was emptied.
+// create writes an empty SKILL.md, opens it in vim, and commits whatever
+// vim saved unless the file was left empty.
 func (m *model) create(name string) {
 	if err := m.checkName(name); err != nil {
 		m.status, m.alarm = err.Error(), true
