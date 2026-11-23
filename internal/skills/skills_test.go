@@ -18,6 +18,7 @@ type fixture struct {
 	t      *testing.T
 	remote string
 	dir    string
+	hosts  *fakeHosts // the hosts of the last model
 }
 
 func newFixture(t *testing.T, skills ...string) *fixture {
@@ -62,7 +63,7 @@ func (f *fixture) repo() *repo {
 }
 
 // model opens the working copy as the screen does. vim appends text to the
-// file it opens, unless text is empty.
+// file it opens, unless text is empty. The hosts are fakes in f.hosts.
 func (f *fixture) model(text string) *model {
 	m := &model{
 		repo:    f.repo(),
@@ -70,6 +71,8 @@ func (f *fixture) model(text string) *model {
 		openVim: func(_, path string) error { return appendText(path, text) },
 		busy:    func(string) {},
 	}
+	f.hosts = newFakeHosts(f.t, m, f.dir)
+	m.hosts, m.run = f.hosts.hosts(), f.hosts.run
 	m.apply(m.repo.open(context.Background()))
 	return m
 }
@@ -440,6 +443,9 @@ func TestRefusedPushKeepsTheCommit(t *testing.T) {
 	}
 	if strings.Join(m.rows, ",") != "deploy" {
 		t.Fatalf("rows = %v", m.rows)
+	}
+	if len(f.hosts.calls) != 0 {
+		t.Fatalf("a failed push refreshed %v", f.hosts.calls)
 	}
 	press(m, "r", "r")
 	if m.note != "1 unpushed commit; left as it is" {

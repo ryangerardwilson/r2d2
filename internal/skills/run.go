@@ -1,7 +1,7 @@
 // Package skills is r2d2 skills, the screen over the skills repository. It
 // keeps a clone of github.com/ryangerardwilson/skills, lists its skills, and
 // creates, edits, and deletes them in vim. Each change is committed and
-// pushed to main, which every host installs from.
+// pushed to main, and then installed for Grok Build, Claude Code, and Codex.
 package skills
 
 import (
@@ -37,8 +37,23 @@ rn renames the selected skill. The field starts as the current name.
 enter opens the selected SKILL.md in vim. d removes the selected skill
 after y. Each one commits Add, Update, Remove, or Rename <name> as Ryan
 Gerard Wilson and pushes main, never with force. A failed push stays on
-screen and keeps the commit. rr fetches and fast-forwards main. r and
-then any other key cancels.
+screen and keeps the commit, and nothing is installed.
+
+After a push, r2d2 installs the commit for each host and checks that the
+installed plugins/skills/skills tree matches it:
+
+  grok plugin marketplace update skills, then grok plugin update skills
+  claude plugin marketplace update skills, then claude plugin update
+    skills@skills -y
+  codex plugin marketplace upgrade skills, then codex plugin add
+    skills@skills --json
+
+The status says pushed only when all three match. A host whose command
+fails, whose CLI is missing, or whose installed copy still differs is
+named with its error, and the pushed commit stays on main. A running
+Grok Build, Claude Code, or Codex loads the new skills after a restart.
+
+rr fetches and fast-forwards main. r and then any other key cancels.
 
 j and k move, g and G jump to the ends, ? shows the shortcuts, and q
 quits. A pipe prints this help.
@@ -81,6 +96,10 @@ func show() error {
 	if err != nil {
 		return err
 	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
 	term, err := openTerminal()
 	if err != nil {
 		return err
@@ -88,6 +107,8 @@ func show() error {
 	defer term.close()
 	m := &model{
 		repo:    &repo{dir: dir, remote: remoteURL, git: runGit},
+		hosts:   hostsFor(home, claudeConfigDir(home)),
+		run:     runHost,
 		lookVim: func() (string, error) { return exec.LookPath("vim") },
 		openVim: func(vim, path string) error {
 			return term.away(func() error { return runVim(vim, path) })

@@ -55,6 +55,9 @@ type model struct {
 	openVim    func(vim, path string) error
 	// busy paints a frame that names the git step running, before it blocks.
 	busy func(text string)
+	// hosts install the skills plugin from main; run runs their commands.
+	hosts []host
+	run   runFunc
 }
 
 // loop paints, reads one key, and handles it until the operator quits.
@@ -364,7 +367,8 @@ func (m *model) save(name, message string) {
 	})
 }
 
-// commitAndPush runs commit, reloads onto stay, and pushes main.
+// commitAndPush runs commit, reloads onto stay, pushes main, and installs
+// the pushed commit for every host. Only then does the status say pushed.
 func (m *model) commitAndPush(stay, message string, commit func(context.Context) error) {
 	ctx := context.Background()
 	m.busy("committing " + message)
@@ -384,7 +388,31 @@ func (m *model) commitAndPush(stay, message string, commit func(context.Context)
 		m.note = "unpushed commits; push failed"
 		return
 	}
-	m.status, m.alarm = "pushed "+message, false
+	m.install(ctx, message)
+}
+
+// install refreshes every host's installed plugin and checks it holds the
+// skills of the commit just pushed. A failure names the host and leaves
+// the commit on main.
+func (m *model) install(ctx context.Context, message string) {
+	want, err := m.repo.tree(ctx)
+	if err != nil {
+		m.status, m.alarm = message+" is on main, not installed: "+err.Error(), true
+		return
+	}
+	var failed, names []string
+	for _, h := range m.hosts {
+		names = append(names, h.name)
+		m.busy("installing " + message + " for " + h.name)
+		if err := refreshHost(ctx, m.run, h, want); err != nil {
+			failed = append(failed, h.name+": "+err.Error())
+		}
+	}
+	if len(failed) > 0 {
+		m.status, m.alarm = message+" is on main, not installed for "+strings.Join(failed, "; "), true
+		return
+	}
+	m.status, m.alarm = "pushed "+message+"; installed for "+strings.Join(names, ", ")+"; restart them to load it", false
 }
 
 // refresh fetches and fast-forwards main, or says why it did not.
