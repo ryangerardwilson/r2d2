@@ -34,7 +34,7 @@ r2d2 skills edits the shared skills for Claude Code, Grok Build, and Codex in a 
 
 On a terminal, `r2d2 skills` SHALL list the skills by name. `j` and `k` SHALL move and SHALL wrap. `g` and `G` SHALL jump to the first and last skill. An empty list SHALL leave the cursor in place and SHALL say `no skills`. The screen SHALL NOT write shortcut text until `?`, and a second `?` SHALL hide it. `q` SHALL quit. The screen SHALL paint only in black, white, and gray.
 
-`n` SHALL ask for a name. A name SHALL be lowercase letters, digits, and hyphens, SHALL NOT start or end with a hyphen, and SHALL be at most 64 characters. A bad name or a name that already exists SHALL be rejected with a message, SHALL NOT write a file, and SHALL leave the screen up. A good name SHALL write an empty `plugins/skills/skills/<name>/SKILL.md` and SHALL open it in vim. When vim exits and the file is not empty, r2d2 SHALL commit `Add <name>` with the file exactly as vim left it. r2d2 SHALL NOT insert, require, or rewrite any header or frontmatter. When the file is empty, r2d2 SHALL remove the new directory and SHALL NOT commit.
+`n` SHALL ask for a name. A name SHALL be lowercase letters, digits, and hyphens, SHALL NOT start or end with a hyphen, and SHALL be at most 64 characters. While that prompt is open, the screen SHALL show a steady block cursor in the cell immediately after the characters typed so far, and SHALL hide the cursor when the prompt closes. A bad name or a name that already exists SHALL be rejected with a message, SHALL NOT write a file, and SHALL leave the screen up. A good name SHALL write an empty `plugins/skills/skills/<name>/SKILL.md` and SHALL open it in vim. When vim exits and the file is not empty, r2d2 SHALL commit `Add <name>` with the file exactly as vim left it. r2d2 SHALL NOT insert, require, or rewrite any header or frontmatter. When the file is empty, r2d2 SHALL remove the new directory and SHALL NOT commit.
 
 Enter SHALL open the selected `SKILL.md` in vim. When the file changed, r2d2 SHALL commit `Update <name>` with the file exactly as vim left it. When it did not change, r2d2 SHALL NOT commit.
 
@@ -43,6 +43,15 @@ Enter SHALL open the selected `SKILL.md` in vim. When the file changed, r2d2 SHA
 `r` SHALL fetch and fast-forward `main` when the worktree is clean, HEAD is `main`, and there are no unpushed commits, and SHALL otherwise say why it did not.
 
 A missing vim SHALL say `vim is not on PATH`, SHALL NOT write a file, and SHALL leave the screen up. Writes SHALL be off when HEAD is not `main`.
+
+#### Scenario: The name prompt uses a block cursor
+
+- **WHEN** the operator presses `n`
+- **THEN** a steady block cursor SHALL sit immediately after `new skill: `
+- **WHEN** the operator types `ab`
+- **THEN** the block cursor SHALL sit immediately after `ab`
+- **WHEN** the operator presses Esc
+- **THEN** the cursor SHALL be hidden
 
 #### Scenario: A new skill is added
 

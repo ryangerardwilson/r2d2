@@ -24,7 +24,7 @@ func openTerminal() (*terminal, error) {
 
 // close leaves the alternate screen and restores the terminal mode.
 func (t *terminal) close() {
-	_, _ = t.out.WriteString("\x1b[?25h\x1b[?1049l")
+	_, _ = t.out.WriteString("\x1b[0 q\x1b[?25h\x1b[?1049l")
 	if t.state != nil {
 		_ = term.Restore(int(t.in.Fd()), t.state)
 		t.state = nil
@@ -61,8 +61,9 @@ func (t *terminal) size() (int, int) {
 }
 
 // paint draws frame from the top left. Raw mode turns off output
-// processing, so each line ends with a carriage return.
-func (t *terminal) paint(frame string) {
+// processing, so each line ends with a carriage return. A positive
+// cursor row then places a steady block cursor at that cell.
+func (t *terminal) paint(frame string, cursorRow, cursorCol int) {
 	lines := strings.Split(strings.TrimSuffix(frame, "\n"), "\n")
 	var b strings.Builder
 	b.WriteString("\x1b[H")
@@ -74,7 +75,17 @@ func (t *terminal) paint(frame string) {
 		b.WriteString("\x1b[K")
 	}
 	b.WriteString("\x1b[J")
+	b.WriteString(blockCursorCodes(cursorRow, cursorCol))
 	_, _ = t.out.WriteString(b.String())
+}
+
+// blockCursorCodes is the steady block cursor, or a hidden cursor when
+// the row is zero.
+func blockCursorCodes(row, col int) string {
+	if row <= 0 || col <= 0 {
+		return "\x1b[?25l"
+	}
+	return fmt.Sprintf("\x1b[%d;%dH\x1b[2 q\x1b[?25h", row, col)
 }
 
 func (t *terminal) readKey() (string, error) {

@@ -26,9 +26,11 @@ var (
 )
 
 // screen is the terminal the list draws on and reads keys from.
+// paint draws frame. A positive cursor row places a steady block cursor
+// at that 1-based cell. A zero row hides the cursor.
 type screen interface {
 	size() (width, height int)
-	paint(frame string)
+	paint(frame string, cursorRow, cursorCol int)
 	readKey() (string, error)
 }
 
@@ -58,14 +60,16 @@ func (m *model) loop(term screen) error {
 	m.busy = func(text string) {
 		m.status, m.alarm = text, false
 		m.width, m.height = term.size()
-		term.paint(m.view())
+		row, col := m.blockCursor()
+		term.paint(m.view(), row, col)
 	}
 	m.busy("syncing")
 	m.apply(m.repo.open(context.Background()))
 	m.status = ""
 	for {
 		m.width, m.height = term.size()
-		term.paint(m.view())
+		row, col := m.blockCursor()
+		term.paint(m.view(), row, col)
 		key, err := term.readKey()
 		if err != nil {
 			return err
@@ -405,7 +409,7 @@ func (m *model) writeRows(b *strings.Builder) {
 func (m *model) footer() (string, string) {
 	switch {
 	case m.naming != nil:
-		line := "new skill: " + *m.naming + "_"
+		line := "new skill: " + *m.naming
 		if m.status != "" {
 			line += "  " + m.status
 		}
@@ -418,6 +422,24 @@ func (m *model) footer() (string, string) {
 		return m.status, styleError
 	}
 	return m.status, styleMuted
+}
+
+// blockCursor is the steady block at the end of the name being typed.
+// A zero row hides the cursor.
+func (m *model) blockCursor() (row, col int) {
+	if m.naming == nil || m.help {
+		return 0, 0
+	}
+	lines := strings.Split(strings.TrimSuffix(m.view(), "\n"), "\n")
+	row = len(lines)
+	col = len("new skill: ") + len(*m.naming) + 1
+	if m.width > 0 && col > m.width {
+		col = m.width
+	}
+	if col < 1 {
+		col = 1
+	}
+	return row, col
 }
 
 func helpView() string {

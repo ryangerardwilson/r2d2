@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -175,6 +176,33 @@ func TestShortcutsHideUntilQuestionMark(t *testing.T) {
 	}
 	if !m.handleKey("q") {
 		t.Fatal("q did not quit")
+	}
+}
+
+func TestNamePromptUsesBlockCursor(t *testing.T) {
+	m := newFixture(t, "alpha").model("")
+	press(m, "n")
+	row, col := m.blockCursor()
+	lines := strings.Split(strings.TrimSuffix(m.view(), "\n"), "\n")
+	if row != len(lines) || col != len("new skill: ")+1 || !strings.HasSuffix(lines[len(lines)-1], "new skill: ") {
+		t.Fatalf("cursor %d,%d prompt %q", row, col, lines[len(lines)-1])
+	}
+	typeKeys(m, "ab")
+	row, col = m.blockCursor()
+	if col != len("new skill: ab")+1 {
+		t.Fatalf("col %d", col)
+	}
+	got := blockCursorCodes(row, col)
+	want := fmt.Sprintf("\x1b[%d;%dH\x1b[2 q\x1b[?25h", row, col)
+	if got != want {
+		t.Fatalf("codes %q", got)
+	}
+	if strings.Contains(m.view(), "new skill: ab_") {
+		t.Fatal("the prompt still draws an underscore")
+	}
+	press(m, "esc")
+	if r, c := m.blockCursor(); r != 0 || c != 0 || blockCursorCodes(r, c) != "\x1b[?25l" {
+		t.Fatalf("hidden %d,%d %q", r, c, blockCursorCodes(r, c))
 	}
 }
 
