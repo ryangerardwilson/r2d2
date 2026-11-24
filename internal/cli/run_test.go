@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/ryangerardwilson/r2d2/internal/screen"
 )
 
 func TestHelpNamesWebAndWrap(t *testing.T) {
@@ -47,10 +49,25 @@ func TestHelpNamesHealthAndMusica(t *testing.T) {
 	if code := Run([]string{"r2d2", "help"}, &out, &err); code != 0 {
 		t.Fatalf("code %d", code)
 	}
-	for _, want := range []string{"r2d2 health", "r2d2 musica", "background jobs and nebula backups", "player, cassettes, and downloads"} {
+	for _, want := range []string{"r2d2 health", "r2d2 musica", "background jobs and nebula backups", "open the Tesseract Musica center"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("missing %q\n%s", want, out.String())
 		}
+	}
+}
+
+func TestHelpScreenLinesDoNotNameMusica(t *testing.T) {
+	var out, err bytes.Buffer
+	if code := Run([]string{"r2d2", "help"}, &out, &err); code != 0 {
+		t.Fatalf("code %d", code)
+	}
+	if strings.Contains(out.String(), "player, cassettes, and downloads") {
+		t.Fatalf("musica screen line\n%s", out.String())
+	}
+	_, after, ok := strings.Cut(out.String(), "screens:\n")
+	lines, _, _ := strings.Cut(after, "\n\n")
+	if !ok || !strings.Contains(lines, "health") || strings.Contains(lines, "musica") {
+		t.Fatalf("screens\n%s", lines)
 	}
 }
 
@@ -62,8 +79,11 @@ func TestHealthHelpWithoutATerminal(t *testing.T) {
 }
 
 func TestMusicaHelpIsThePlayerHelp(t *testing.T) {
+	if screen.Known("musica") {
+		t.Fatal("musica is a screen")
+	}
 	var out, err bytes.Buffer
-	if code := Run([]string{"r2d2", "musica", "help"}, &out, &err); code != 0 || !strings.Contains(out.String(), "musica terminal music player") || !strings.Contains(out.String(), "r2d2 musica") {
+	if code := Run([]string{"r2d2", "musica", "help"}, &out, &err); code != 0 || !strings.Contains(out.String(), "musica terminal music player") || !strings.Contains(out.String(), "r2d2 musica") || strings.Contains(err.String(), "unknown screen") {
 		t.Fatalf("code %d\n%s%s", code, out.String(), err.String())
 	}
 }

@@ -26,8 +26,14 @@ func TestLaunchPassesTheScreenArguments(t *testing.T) {
 }
 
 func TestWebIsAScreenAndNlpIsNot(t *testing.T) {
-	if !Known("web") || !Known("looptab") || !Known("slack") || !Known("health") || !Known("musica") || !Known("rec") || Known("nlp") {
+	if !Known("web") || !Known("looptab") || !Known("slack") || !Known("health") || !Known("rec") || Known("nlp") {
 		t.Fatal("screen list")
+	}
+}
+
+func TestMusicaIsNotAScreen(t *testing.T) {
+	if Known("musica") || Own("musica") {
+		t.Fatal("musica is a screen")
 	}
 }
 

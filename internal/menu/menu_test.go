@@ -38,12 +38,13 @@ func TestMenuMovesAndWraps(t *testing.T) {
 	}
 }
 
-func TestMenuListsHealthAndMusica(t *testing.T) {
+func TestMenuListsHealthButNotMusica(t *testing.T) {
 	text := model{}.View()
-	for _, want := range []string{"health       background jobs and nebula backups", "musica       player, cassettes, and downloads"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("missing %q\n%s", want, text)
-		}
+	if !strings.Contains(text, "health       background jobs and nebula backups") {
+		t.Fatalf("missing health\n%s", text)
+	}
+	if strings.Contains(text, "musica") {
+		t.Fatalf("the menu lists musica\n%s", text)
 	}
 }
 

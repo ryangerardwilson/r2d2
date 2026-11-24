@@ -14,8 +14,9 @@ type Screen struct {
 }
 
 // Screens are the screens r2d2 opens, in menu order. web, looptab, health,
-// musica, rec, and skills are implemented here. The others run in this process
-// through the c3po screen package.
+// rec, and skills are implemented here. The others run in this process through the
+// c3po screen package. musica is not a screen: r2d2 musica calls the musica
+// player package from internal/cli and is not in the menu.
 var Screens = []Screen{
 	{"web", "ryangerardwilson.com admin panel"},
 	{"cyclotree", "calls of one function, as a tree you move with hjkl"},
@@ -29,7 +30,6 @@ var Screens = []Screen{
 	{"looptab", "Looptab jobs, run one now or edit the jobs file"},
 	{"slack", "direct messages, tags, and what to know"},
 	{"health", "background jobs and nebula backups"},
-	{"musica", "player, cassettes, and downloads"},
 	{"rec", "screen recorder and camera"},
 	{"skills", "shared skills for Claude Code, Grok Build, and Codex"},
 }
@@ -51,12 +51,12 @@ func Known(name string) bool {
 
 // Own reports whether r2d2 runs the screen itself rather than through c3po.
 func Own(name string) bool {
-	return name == "web" || name == "looptab" || name == "health" || name == "musica" || name == "rec" || name == "skills"
+	return name == "web" || name == "looptab" || name == "health" || name == "rec" || name == "skills"
 }
 
-// Launch runs a screen that lives in c3po. web, looptab, health, musica,
-// rec, and skills are not launched here. Arguments after the screen name, including --resume, are
-// passed through.
+// Launch runs a screen that lives in c3po. web, looptab, health, rec, and
+// skills are not launched here, and musica is not a screen. Arguments after the screen
+// name, including --resume, are passed through.
 func Launch(name string, args []string, stdout, stderr io.Writer) int {
 	if Own(name) || !Known(name) {
 		fmt.Fprintf(stderr, "unknown screen %q\n", name)

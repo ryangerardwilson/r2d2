@@ -3,10 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
-	"github.com/ryangerardwilson/musica/player"
 	"github.com/ryangerardwilson/r2d2/internal/health"
 	"github.com/ryangerardwilson/r2d2/internal/looptab"
 	"github.com/ryangerardwilson/r2d2/internal/menu"
@@ -41,7 +39,8 @@ const helpUsage = `r2d2 is the terminal program. c3po is the agent CLI.
   r2d2 health
     whether background jobs and nebula backups are working
   r2d2 musica [args...]
-    the musica player; end, play, open, config, and help pass through
+    open the Tesseract Musica center; end, play, open, config, help,
+    and download-worker pass through
   r2d2 rec [start|pause|resume|stop|focus|quit|status|toggle]
     the camera in the corner of a screen recording, and its controls
   r2d2 skills
@@ -96,7 +95,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	case "health":
 		return health.Run(rest[1:], stdout, stderr)
 	case "musica":
-		return player.Run(rest[1:], os.Stdin, stdout, stderr)
+		// musica is not a screen, so it is dispatched before screen.Known.
+		return runMusica(rest[1:], stdout, stderr)
 	case "rec":
 		return rec.Run(rest[1:], stdout, stderr)
 	case "skills":

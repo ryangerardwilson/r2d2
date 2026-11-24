@@ -12,7 +12,7 @@ On a terminal, `r2d2` with no arguments opens that menu. `j` and `k` move, Enter
 
 `r2d2 health` shows whether the background jobs are working: the long-running user services, each timer and the last run of its oneshot, the backups on nebula s3, how far each `nebula keep` copy lags, and each process `nebula run list` names. A row is `ok`, `waiting`, or `down` with a short reason. It checks on open and on `r`, and only reads. A pipe prints the rows.
 
-`r2d2 musica` opens the [musica](https://github.com/ryangerardwilson/musica) player through its public `player` package. `r2d2 musica end`, `help`, `play`, `open`, and `config` pass through. Downloads still run as `musica download-worker`, so the musica binary stays installed.
+`r2d2 musica` is not in the screen menu. With no arguments it runs the launcher's `~/.config/quickshell/omarchy-launcher/open.sh musica` in its own session, as bare `musica` does, which shows the Tesseract Musica center, the Super+T launcher showing Musica. It does not open the terminal player. `r2d2 musica end`, `play`, `open`, `config`, `help`, and `download-worker` call the public `player` package of [musica](https://github.com/ryangerardwilson/musica) in this process. Downloads still run as `musica download-worker`, so the musica binary stays installed.
 
 `r2d2 rec` controls the rec camera, the circle in the corner of a screen recording. The camera stays its own window so it is in the recording. On a terminal the screen shows the status, the clock, whether the camera is in the corner or fills the screen, and the last error or saved file. `r2d2 rec start`, `pause`, `resume`, `stop`, `focus`, `quit`, `status`, and `toggle` print the camera's reply. Without a terminal, `r2d2 rec` opens the camera and exits 0.
 
