@@ -17,8 +17,8 @@ import (
 const (
 	// remoteURL is the source of truth. main on it is what every host installs.
 	remoteURL = "https://github.com/ryangerardwilson/skills"
-	// skillRoot holds one directory per skill, inside the one skills plugin.
-	skillRoot  = "plugins/skills/skills"
+	// skillRoot holds one directory per skill, inside the r2d2-skills plugin.
+	skillRoot  = "plugins/r2d2-skills/skills"
 	branch     = "main"
 	authorName = "Ryan Gerard Wilson"
 	authorMail = "98247320+ryangerardwilson@users.noreply.github.com"

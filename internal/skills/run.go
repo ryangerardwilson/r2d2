@@ -25,7 +25,7 @@ create, edit, and delete the shared skills for Claude Code, Grok Build, and Code
 
 main on https://github.com/ryangerardwilson/skills is the source of truth.
 The screen keeps a clone at ~/.local/share/r2d2/skills and lists each
-plugins/skills/skills/<name>/SKILL.md. On open, a missing clone is cloned,
+plugins/r2d2-skills/skills/<name>/SKILL.md. On open, a missing clone is cloned,
 and a clean main with no unpushed commits is fetched and fast-forwarded. A
 dirty worktree, unpushed commits, or another branch is left as it is and
 the screen says so. A directory that is not the skills repository is never
@@ -40,13 +40,13 @@ Gerard Wilson and pushes main, never with force. A failed push stays on
 screen and keeps the commit, and nothing is installed.
 
 After a push, r2d2 installs the commit for each host and checks that the
-installed plugins/skills/skills tree matches it:
+installed plugins/r2d2-skills/skills tree matches it:
 
-  grok plugin marketplace update skills, then grok plugin update skills
+  grok plugin marketplace update skills, then grok plugin update r2d2-skills
   claude plugin marketplace update skills, then claude plugin update
-    skills@skills -y
+    r2d2-skills@skills -y
   codex plugin marketplace upgrade skills, then codex plugin add
-    skills@skills --json
+    r2d2-skills@skills --json
 
 The status says pushed only when all three match. A host whose command
 fails, whose CLI is missing, or whose installed copy still differs is

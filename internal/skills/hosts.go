@@ -19,9 +19,10 @@ import (
 )
 
 const (
-	// pluginName is the one plugin every host installs from the marketplace.
-	pluginName = "skills"
-	pluginID   = "skills@skills"
+	// marketplaceName is the marketplace. pluginName is the one plugin hosts list.
+	marketplaceName = "skills"
+	pluginName      = "r2d2-skills"
+	pluginID        = "r2d2-skills@skills"
 	// pluginSkills is the skill root inside an installed plugin directory.
 	pluginSkills = "skills"
 	// hostTimeout bounds one host command. A marketplace update clones.
@@ -47,7 +48,7 @@ func hostsFor(home, claudeDir string) []host {
 		{
 			name: "Grok Build",
 			steps: [][]string{
-				{"grok", "plugin", "marketplace", "update", pluginName},
+				{"grok", "plugin", "marketplace", "update", marketplaceName},
 				{"grok", "plugin", "update", pluginName},
 			},
 			installed: func(string) ([]string, error) {
@@ -57,7 +58,7 @@ func hostsFor(home, claudeDir string) []host {
 		{
 			name: "Claude Code",
 			steps: [][]string{
-				{"claude", "plugin", "marketplace", "update", pluginName},
+				{"claude", "plugin", "marketplace", "update", marketplaceName},
 				{"claude", "plugin", "update", pluginID, "-y"},
 			},
 			installed: func(string) ([]string, error) {
@@ -67,7 +68,7 @@ func hostsFor(home, claudeDir string) []host {
 		{
 			name: "Codex",
 			steps: [][]string{
-				{"codex", "plugin", "marketplace", "upgrade", pluginName},
+				{"codex", "plugin", "marketplace", "upgrade", marketplaceName},
 				{"codex", "plugin", "add", pluginID, "--json"},
 			},
 			installed: codexInstalled,
@@ -178,7 +179,7 @@ func grokInstalled(registry string) ([]string, error) {
 	return nil, fmt.Errorf("%s is not installed in %s", pluginName, registry)
 }
 
-// claudeInstalled is the install path of skills@skills, the user scope first.
+// claudeInstalled is the install path of r2d2-skills@skills, the user scope first.
 func claudeInstalled(path string) ([]string, error) {
 	var file struct {
 		Plugins map[string][]struct {

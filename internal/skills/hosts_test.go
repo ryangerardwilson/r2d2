@@ -149,7 +149,7 @@ func TestEmptyCommitInstallsNothing(t *testing.T) {
 func TestFailedInstallNamesTheHostAndKeepsThePush(t *testing.T) {
 	f := newFixture(t)
 	m := f.model("x")
-	f.hosts.fail["Claude Code"] = errors.New("claude plugin update skills@skills -y: no network")
+	f.hosts.fail["Claude Code"] = errors.New("claude plugin update r2d2-skills@skills -y: no network")
 	addSkill(m, "deploy")
 	if !reflect.DeepEqual(f.hosts.calls, hostNames) {
 		t.Fatalf("calls = %v", f.hosts.calls)
@@ -157,7 +157,7 @@ func TestFailedInstallNamesTheHostAndKeepsThePush(t *testing.T) {
 	if !m.alarm || strings.Contains(m.status, "pushed") {
 		t.Fatalf("status = %q", m.status)
 	}
-	if !strings.Contains(m.status, "Claude Code: claude plugin update skills@skills -y: no network") {
+	if !strings.Contains(m.status, "Claude Code: claude plugin update r2d2-skills@skills -y: no network") {
 		t.Fatalf("status does not name the host and error: %q", m.status)
 	}
 	if strings.Contains(m.status, "Grok Build:") || strings.Contains(m.status, "Codex:") {
@@ -205,15 +205,15 @@ func TestHostCommands(t *testing.T) {
 	want := map[string][][]string{
 		"Grok Build": {
 			{"grok", "plugin", "marketplace", "update", "skills"},
-			{"grok", "plugin", "update", "skills"},
+			{"grok", "plugin", "update", "r2d2-skills"},
 		},
 		"Claude Code": {
 			{"claude", "plugin", "marketplace", "update", "skills"},
-			{"claude", "plugin", "update", "skills@skills", "-y"},
+			{"claude", "plugin", "update", "r2d2-skills@skills", "-y"},
 		},
 		"Codex": {
 			{"codex", "plugin", "marketplace", "upgrade", "skills"},
-			{"codex", "plugin", "add", "skills@skills", "--json"},
+			{"codex", "plugin", "add", "r2d2-skills@skills", "--json"},
 		},
 	}
 	var names []string
@@ -241,7 +241,7 @@ func writeFile(t *testing.T, path, body string) {
 func TestInstalledPaths(t *testing.T) {
 	root := t.TempDir()
 	claude := filepath.Join(root, "installed_plugins.json")
-	writeFile(t, claude, `{"version":2,"plugins":{"skills@skills":[
+	writeFile(t, claude, `{"version":2,"plugins":{"r2d2-skills@skills":[
 		{"scope":"project","installPath":"/p"},
 		{"scope":"user","installPath":"/c/cache/skills/skills/972f75e1bd58"}]}}`)
 	if got, err := claudeInstalled(claude); err != nil || !reflect.DeepEqual(got, []string{"/c/cache/skills/skills/972f75e1bd58"}) {
@@ -257,7 +257,7 @@ func TestInstalledPaths(t *testing.T) {
 		"figma-1":{"kind":{"type":"Git"},"path":"/g/figma","plugins":{"figma":{}},
 			"marketplace":{"source_url_or_path":"https://github.com/xai-org/plugin-marketplace.git"}},
 		"skills-b91c08ab":{"kind":{"type":"Local","source_path":"/g/cache/plugins/skills"},
-			"path":"/g/installed-plugins/skills-b91c08ab","plugins":{"skills":{}},
+			"path":"/g/installed-plugins/skills-b91c08ab","plugins":{"r2d2-skills":{}},
 			"marketplace":{"source_url_or_path":"https://github.com/ryangerardwilson/skills.git"}}}}`)
 	want := []string{"/g/installed-plugins/skills-b91c08ab", "/g/cache/plugins/skills"}
 	if got, err := grokInstalled(grok); err != nil || !reflect.DeepEqual(got, want) {
@@ -267,7 +267,7 @@ func TestInstalledPaths(t *testing.T) {
 		t.Fatal("a missing grok registry passed")
 	}
 
-	out := `{"pluginId":"skills@skills","installedPath":"/x/plugins/cache/skills/skills/local"}`
+	out := `{"pluginId":"r2d2-skills@skills","installedPath":"/x/plugins/cache/skills/skills/local"}`
 	if got, err := codexInstalled(out); err != nil || !reflect.DeepEqual(got, []string{"/x/plugins/cache/skills/skills/local"}) {
 		t.Fatalf("codex = %v %v", got, err)
 	}

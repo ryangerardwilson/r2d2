@@ -16,7 +16,7 @@ On a terminal, `r2d2` with no arguments opens that menu. `j` and `k` move, Enter
 
 `r2d2 rec` controls the rec camera, the circle in the corner of a screen recording. The camera stays its own window so it is in the recording. On a terminal the screen shows the status, the clock, whether the camera is in the corner or fills the screen, and the last error or saved file. `r2d2 rec start`, `pause`, `resume`, `stop`, `focus`, `quit`, `status`, and `toggle` print the camera's reply. Without a terminal, `r2d2 rec` opens the camera and exits 0.
 
-`r2d2 skills` edits the shared skills for Claude Code, Grok Build, and Codex. Their source of truth is `main` on [ryangerardwilson/skills](https://github.com/ryangerardwilson/skills), which each host installs as one plugin named `skills`. The screen keeps a clone at `~/.local/share/r2d2/skills` and lists the skills. `n` creates one in vim, Enter edits one, and `d` removes one. Each change is committed and pushed to `main`. A dirty clone, unpushed commits, or another branch is left as it is and the screen says so.
+`r2d2 skills` edits the shared skills for Claude Code, Grok Build, and Codex. Their source of truth is `main` on [ryangerardwilson/skills](https://github.com/ryangerardwilson/skills), which each host installs as one plugin named `r2d2-skills`. The screen keeps a clone at `~/.local/share/r2d2/skills` and lists the skills. `n` creates one in vim, Enter edits one, and `d` removes one. Each change is committed and pushed to `main`. A dirty clone, unpushed commits, or another branch is left as it is and the screen says so.
 
 ```sh
 r2d2 web
