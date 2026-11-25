@@ -22,5 +22,5 @@
 - [x] 4.1 Bare `r2d2 musica` runs `open.sh musica` in its own session and does not call `player.Run`; arguments still go to `player.Run`
 - [x] 4.2 Test the script path, the `$XDG_CONFIG_HOME` rule, the failure message, and that `help` and `end` do not open the center
 - [x] 4.3 Bring `openspec/specs/musica-screen/spec.md` and `openspec/specs/r2d2/spec.md` in line with the MODIFIED blocks, and validate with `--strict`
-- [x] 4.4 `GOWORK=off go test ./...` and `go vet ./...`; `go.mod` and `go.sum` unchanged
+- [x] 4.4 `GOWORK=off go test ./...` and `go vet ./...`. The require is the published tesseract module.
 - [x] 4.5 Install from `/tmp` with `bash /home/ryan/OpenSource/r2d2/install.sh`

@@ -5,8 +5,8 @@ go 1.26.4
 require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/ryangerardwilson/c3po v0.4.1-0.20261123015810-a3a5db0e4495
-	github.com/ryangerardwilson/musica v0.0.0-20261123015810-9f16b1ddb6c2
 	github.com/ryangerardwilson/nebula v0.0.0-20261123015757-e4f5e918fb18
+	github.com/ryangerardwilson/tesseract v0.1.1-0.20261125031953-6de63972cab2
 	golang.org/x/term v0.44.0
 )
 

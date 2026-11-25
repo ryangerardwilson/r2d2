@@ -8,15 +8,14 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/ryangerardwilson/musica/player"
+	"github.com/ryangerardwilson/tesseract/player"
 )
 
 // runMusica is r2d2 musica. With no arguments it shows the Tesseract Musica
 // center through the launcher's open.sh musica, as bare musica does. It does
-// not call player.Run for that: the pinned musica module opens the terminal
-// player with no arguments, and a terminal holding the musica session is what
-// the center has to take over. end, play, open, config, help, and
-// download-worker pass to player.Run unchanged.
+// not call player.Run for that, because that no-argument call opens the center
+// on its own. end, play, open, config, help, and download-worker pass to
+// player.Run from github.com/ryangerardwilson/tesseract/player.
 func runMusica(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		return openMusicaCenter(stderr)
