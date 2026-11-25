@@ -266,6 +266,16 @@ func TestInstalledPaths(t *testing.T) {
 	if _, err := grokInstalled(filepath.Join(root, "missing.json")); err == nil {
 		t.Fatal("a missing grok registry passed")
 	}
+	writeFile(t, grok, `{"version":1,"repos":{
+		"r2d2-skills-git":{"kind":{"type":"Git","url":"https://github.com/ryangerardwilson/skills","subdir":"plugins/r2d2-skills"},
+			"path":"/g/installed-plugins/r2d2-skills","plugins":{"r2d2-skills":{}}}}}`)
+	if got, err := grokInstalled(grok); err != nil || !reflect.DeepEqual(got, []string{"/g/installed-plugins/r2d2-skills/plugins/r2d2-skills"}) {
+		t.Fatalf("grok git = %v %v", got, err)
+	}
+	writeFile(t, grok, `{"repos":{"other":{"kind":{"type":"Git","url":"https://example.com/nope"},"path":"/no","plugins":{"r2d2-skills":{}}}}}`)
+	if _, err := grokInstalled(grok); err == nil {
+		t.Fatal("a different git url passed")
+	}
 
 	out := `{"pluginId":"r2d2-skills@skills","installedPath":"/x/plugins/cache/skills/skills/local"}`
 	if got, err := codexInstalled(out); err != nil || !reflect.DeepEqual(got, []string{"/x/plugins/cache/skills/skills/local"}) {

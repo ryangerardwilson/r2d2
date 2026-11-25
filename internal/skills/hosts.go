@@ -147,14 +147,17 @@ func refreshHost(ctx context.Context, run runFunc, h host, want map[string]strin
 	return nil
 }
 
-// grokInstalled is the installed copy of skills in Grok's registry, and
-// the marketplace directory it was copied from when that is local.
+// grokInstalled is the installed copy of r2d2-skills in Grok's registry.
+// A marketplace install names the skills repository as its source. A git
+// install names that repository as its URL, and its skills live under subdir.
 func grokInstalled(registry string) ([]string, error) {
 	var reg struct {
 		Repos map[string]struct {
 			Kind struct {
 				Type       string `json:"type"`
 				SourcePath string `json:"source_path"`
+				URL        string `json:"url"`
+				Subdir     string `json:"subdir"`
 			} `json:"kind"`
 			Path        string                     `json:"path"`
 			Plugins     map[string]json.RawMessage `json:"plugins"`
@@ -167,10 +170,21 @@ func grokInstalled(registry string) ([]string, error) {
 		return nil, err
 	}
 	for _, repo := range reg.Repos {
-		if _, ok := repo.Plugins[pluginName]; !ok || remoteKey(repo.Marketplace.Source) != remoteKey(remoteURL) {
+		if _, ok := repo.Plugins[pluginName]; !ok {
 			continue
 		}
-		dirs := []string{repo.Path}
+		source := repo.Marketplace.Source
+		if source == "" {
+			source = repo.Kind.URL
+		}
+		if remoteKey(source) != remoteKey(remoteURL) {
+			continue
+		}
+		root := repo.Path
+		if repo.Kind.Subdir != "" {
+			root = filepath.Join(repo.Path, filepath.FromSlash(repo.Kind.Subdir))
+		}
+		dirs := []string{root}
 		if repo.Kind.Type == "Local" && repo.Kind.SourcePath != "" {
 			dirs = append(dirs, repo.Kind.SourcePath)
 		}
